@@ -299,6 +299,8 @@ SendRichTelegramNotification(title, detailsMap) {
     try {
         Req := ComObject("WinHttp.WinHttpRequest.5.1")
         Req.Open("POST", TelegramURL, false)
+        ; أضف مهلات زمنية صريحة لتفادي الانتظار الطويل (2 ثانية لكل مرحلة)
+        Req.SetTimeouts(2000, 2000, 2000, 2000)
         Req.SetRequestHeader("Content-Type", "application/x-www-form-urlencoded")
         Req.Send(postBody)
 

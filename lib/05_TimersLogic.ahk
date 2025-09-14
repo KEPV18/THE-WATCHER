@@ -227,7 +227,10 @@ ClickStayOnlineButton() {
     if (ReliableImageSearch(&foundX, &foundY, SETTINGS["StayOnlineImage"], stayOnlineArea)) {
         Info("Stay Online button found. Attempting to click.")
         ShowLocalNotification("❗ Stay Online window appeared!")
-        SendRichTelegramNotification("❗ Stay Online Window Detected", Map("Action", "Attempting to click the button automatically."))
+        ; كان هنا إرسال متزامن لـ Telegram — سبب محتمل للتهنيج
+        ; SendRichTelegramNotification("❗ Stay Online Window Detected", Map("Action", "Attempting to click the button automatically."))
+        ; نضيف الرسالة للطابور بدلاً من الحجب
+        QueueTelegram(Map("type", "text", "title", "❗ Stay Online Window Detected", "details", Map("Action", "Attempting to click the button automatically.")))
         pBitmap := Gdip_CreateBitmapFromFile(SETTINGS["StayOnlineImage"])
         if !pBitmap {
             Warn("Could not load StayOnlineImage to get its dimensions.")
@@ -253,7 +256,9 @@ ClickStayOnlineButton() {
         if !STATE["isAlarmPlaying"] {
             STATE["isAlarmPlaying"] := true
             ShowLocalNotification("🚨 ALARM: Stay Online button is STUCK!")
-            SendRichTelegramNotification("🚨 ALARM: Stay Online Button Stuck", Map("Attempts", 5, "Action", "Manual intervention required!"))
+            ; برضه نخلي التنبيه يتصف في الطابور لتفادي الحجب
+            ; SendRichTelegramNotification("🚨 ALARM: Stay Online Button Stuck", Map("Attempts", 5, "Action", "Manual intervention required!"))
+            QueueTelegram(Map("type", "text", "title", "🚨 ALARM: Stay Online Button Stuck", "details", Map("Attempts", 5, "Action", "Manual intervention required!")))
             SetTimer(AlarmBeep, 300)
         }
     }
