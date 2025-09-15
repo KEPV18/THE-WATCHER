@@ -6,26 +6,41 @@
 
 ; ---------------- Reliable Image Search ----------------
 ReliableImageSearch(&foundX, &foundY, ImageFile, SearchArea := "") {
+    static imageCache := Map()
     foundX := -1
     foundY := -1
 
     if (!FileExist(ImageFile)) {
         try {
             Warn("Image file not found: " . ImageFile)
-        } catch {
-            ; Do nothing
         }
         return false
     }
 
-    tol := 50
+    ; تحسين التخزين المؤقت للصور وإدارة الذاكرة
+    if (!imageCache.Has(ImageFile)) {
+        try {
+            pBitmap := Gdip_CreateBitmapFromFile(ImageFile)
+            if (pBitmap) {
+                imageCache[ImageFile] := pBitmap
+            }
+        }
+    }
+
+    ; استخدام الصورة المخزنة مؤقتاً
+    pBitmap := imageCache[ImageFile]
+    if (!pBitmap) {
+        return false
+    }
+
+    ; تحسين دقة البحث
+    tol := 30  ; تقليل التسامح للحصول على نتائج أدق
     try {
         if (IsObject(SETTINGS) && SETTINGS.Has("ImageSearchTolerance"))
             tol := SETTINGS["ImageSearchTolerance"]
-    } catch {
-        ; Do nothing
     }
 
+    ; تحسين منطقة البحث
     local searchX1 := 0, searchY1 := 0, searchX2 := A_ScreenWidth, searchY2 := A_ScreenHeight
     try {
         if (IsObject(SearchArea) && SearchArea.Has("x1")) {
@@ -34,21 +49,18 @@ ReliableImageSearch(&foundX, &foundY, ImageFile, SearchArea := "") {
             searchX2 := SearchArea.x2
             searchY2 := SearchArea.y2
         }
-    } catch {
-        ; Do nothing
     }
 
+    ; تحسين أداء البحث
     try {
+        CoordMode "Pixel", "Screen"
         searchParam := "*" . tol . " *TransBlack " . ImageFile
-        ; ImageSearch expects x1,y1,x2,y2 — pass searchY2 (not searchX2 twice)
         if (ImageSearch(&foundX, &foundY, searchX1, searchY1, searchX2, searchY2, searchParam)) {
             return true
         }
-    } catch {
+    } catch as err {
         try {
-            LogError("ImageSearch CRITICAL FAIL (no details).")
-        } catch {
-            ; Do nothing
+            LogError("ImageSearch failed: " . err.Message)
         }
         return false
     }

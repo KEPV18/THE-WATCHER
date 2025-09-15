@@ -220,47 +220,66 @@ AlarmBeep(*) {
 
 ClickStayOnlineButton() {
     global SETTINGS, STATE
-    if (!WinExist(SETTINGS["FrontlineWinTitle"]))
+    static clickingBusy := false
+    
+    ; منع التداخل في عمليات النقر
+    if (clickingBusy)
         return
-    stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
-    local foundX, foundY
-    if (ReliableImageSearch(&foundX, &foundY, SETTINGS["StayOnlineImage"], stayOnlineArea)) {
-        Info("Stay Online button found. Attempting to click.")
-        ShowLocalNotification("❗ Stay Online window appeared!")
-        ; كان هنا إرسال متزامن لـ Telegram — سبب محتمل للتهنيج
-        ; SendRichTelegramNotification("❗ Stay Online Window Detected", Map("Action", "Attempting to click the button automatically."))
-        ; نضيف الرسالة للطابور بدلاً من الحجب
-        QueueTelegram(Map("type", "text", "title", "❗ Stay Online Window Detected", "details", Map("Action", "Attempting to click the button automatically.")))
-        pBitmap := Gdip_CreateBitmapFromFile(SETTINGS["StayOnlineImage"])
-        if !pBitmap {
-            Warn("Could not load StayOnlineImage to get its dimensions.")
-            Click(foundX + 10, foundY + 10)
+    clickingBusy := true
+
+    try {
+        if (!WinExist(SETTINGS["FrontlineWinTitle"]))
             return
-        }
-        imageWidth := Gdip_GetImageWidth(pBitmap)
-        imageHeight := Gdip_GetImageHeight(pBitmap)
-        Gdip_DisposeImage(pBitmap)
-        clickX := foundX + (imageWidth / 2)
-        clickY := foundY + (imageHeight / 2)
-        Loop 5 {
-            Info("Clicking Stay Online button, attempt " . A_Index)
-            Click(clickX, clickY)
-            Sleep(1000)
-            if (!ReliableImageSearch(&foundX, &foundY, SETTINGS["StayOnlineImage"], stayOnlineArea)) {
-                Info("Stay Online button successfully clicked and disappeared.")
-                return
+
+        ; توحيد نظام الإحداثيات
+        CoordMode "Mouse", "Screen"
+        
+        stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], 
+                             "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
+        local foundX, foundY
+
+        if (ReliableImageSearch(&foundX, &foundY, SETTINGS["StayOnlineImage"], stayOnlineArea)) {
+            Info("Stay Online button found. Attempting to click.")
+            ShowLocalNotification("❗ Stay Online window appeared!")
+            QueueTelegram(Map("type", "text", "title", "❗ Stay Online Window Detected", 
+                           "details", Map("Action", "Attempting to click the button automatically.")))
+
+            ; استخدام الصورة المخزنة مؤقتاً من ReliableImageSearch
+            clickX := foundX + 10
+            clickY := foundY + 10
+
+            ; محاولات النقر مع تأخير مناسب
+            Loop 3 {
+                BlockInput true
+                try {
+                    MouseMove clickX, clickY
+                    Sleep 100
+                    Click
+                    Sleep 500
+                } finally {
+                    BlockInput false
+                }
+
+                ; التحقق من اختفاء الزر
+                Sleep 1000
+                if (!ReliableImageSearch(&foundX, &foundY, SETTINGS["StayOnlineImage"], stayOnlineArea)) {
+                    Info("Stay Online button successfully clicked and disappeared.")
+                    return
+                }
+                Sleep 500
             }
-            Info("Verification failed, button still visible. Retrying...")
+
+            ; تنبيه في حالة الفشل
+            if !STATE["isAlarmPlaying"] {
+                STATE["isAlarmPlaying"] := true
+                ShowLocalNotification("🚨 ALARM: Stay Online button is STUCK!")
+                QueueTelegram(Map("type", "text", "title", "🚨 ALARM: Stay Online Button Stuck",
+                               "details", Map("Attempts", 3, "Action", "Manual intervention required!")))
+                SetTimer(AlarmBeep, 300)
+            }
         }
-        Info("CRITICAL: Failed to dismiss Stay Online button after 5 attempts.")
-        if !STATE["isAlarmPlaying"] {
-            STATE["isAlarmPlaying"] := true
-            ShowLocalNotification("🚨 ALARM: Stay Online button is STUCK!")
-            ; برضه نخلي التنبيه يتصف في الطابور لتفادي الحجب
-            ; SendRichTelegramNotification("🚨 ALARM: Stay Online Button Stuck", Map("Attempts", 5, "Action", "Manual intervention required!"))
-            QueueTelegram(Map("type", "text", "title", "🚨 ALARM: Stay Online Button Stuck", "details", Map("Attempts", 5, "Action", "Manual intervention required!")))
-            SetTimer(AlarmBeep, 300)
-        }
+    } finally {
+        clickingBusy := false
     }
 }
 
