@@ -114,6 +114,13 @@ RefreshTimer(*) {
 
 MonitorTargetTimer(*) {
     global SETTINGS, STATE
+    static lastIdleCheck := 0
+    
+    ; تحقق من الخمول كل 10 ثواني فقط
+    if (A_TickCount - lastIdleCheck < 10000)
+        return
+    lastIdleCheck := A_TickCount
+    
     if (STATE["onlineStatus"] != "Online" || STATE["isMonitoringPaused"]) {
         if (STATE["isAlarmPlaying"] && STATE["onlineStatus"] != "Online") {
             STATE["isAlarmPlaying"] := false
@@ -412,9 +419,17 @@ NetCheckTimer(*) {
 ; --- Battery Check Timer ---
 BatteryCheckTimer(*) {
     global SETTINGS, STATE
+    static lastBatteryCheck := 0
+    
+    ; تحقق من البطارية كل 10 دقائق (600000 مللي ثانية)
+    if (A_TickCount - lastBatteryCheck < 600000)
+        return
+    lastBatteryCheck := A_TickCount
+    
     thr := SETTINGS.Has("BatteryAlertThreshold") ? SETTINGS["BatteryAlertThreshold"] : 20
     cdMs := SETTINGS.Has("BatteryAlertCooldown") ? SETTINGS["BatteryAlertCooldown"] : 1800000
     pct := GetBatteryPercent()
+    
     if (pct >= 0 && pct <= thr) {
         now := A_TickCount
         last := STATE.Has("lastBatteryAlertTick") ? STATE["lastBatteryAlertTick"] : 0
