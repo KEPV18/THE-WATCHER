@@ -664,3 +664,48 @@ LoadStateSnapshot(path) {
         ; تجاهل
     }
 }
+
+; ---------------- Save Target Word Area Screenshot ----------------
+SaveTargetWordScreenshot(label := "target_missing") {
+    global SETTINGS
+    local result := Map("ok", false, "reason", "unknown error", "file", "")
+
+    x := SETTINGS.Has("TargetAreaTopLeftX") ? SETTINGS["TargetAreaTopLeftX"] : 0
+    y := SETTINGS.Has("TargetAreaTopLeftY") ? SETTINGS["TargetAreaTopLeftY"] : 0
+    brx := SETTINGS.Has("TargetAreaBottomRightX") ? SETTINGS["TargetAreaBottomRightX"] : 0
+    bry := SETTINGS.Has("TargetAreaBottomRightY") ? SETTINGS["TargetAreaBottomRightY"] : 0
+
+    w := brx - x, h := bry - y
+    if (w <= 0 || h <= 0) {
+        result.reason := "invalid area"
+        return result
+    }
+
+    ts := FormatTime(A_Now, "yyyyMMdd_HHmmss")
+    baseDir := A_ScriptDir . "\screenshots\target word"
+    try {
+        if !DirExist(baseDir)
+            DirCreate(baseDir)
+    }
+    finalName := baseDir . "\" . label . "_" . ts . ".png"
+
+    try {
+        hBmp := CaptureAreaBitmap(x, y, w, h)
+        if (!hBmp) {
+            result.reason := "capture_failed"
+            return result
+        }
+        saved := Gdip_SaveBitmapToFile(hBmp, finalName)
+        if (hBmp)
+            DllCall("DeleteObject", "Ptr", hBmp)
+        if (!saved) {
+            result.reason := "save_failed"
+            return result
+        }
+        result.ok := true
+        result.file := finalName
+        result.reason := "success"
+        try Info("Saved target-word screenshot: " . finalName)
+    }
+    return result
+}

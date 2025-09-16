@@ -7,7 +7,12 @@ InitializeScript() {
     
     ; --- Load all settings from the .ini file ---
     LoadSettings()
-    
+    ; فرض القيم المطلوبة إلى دقيقة واحدة كما طُلب (بدون التأثير على زر Stay Online)
+    SETTINGS["StatusCheckInterval"] := 60000       ; Last Check كل دقيقة
+    SETTINGS["RefreshInterval"] := 60000           ; Last Refresh كل دقيقة
+    SETTINGS["UserIdleThreshold"] := 60000         ; User Idle Threshold دقيقة واحدة
+    ; لو حبيت نعدل غيرهم كمان بلغني (زي MainLoopInterval أو غيره)
+
     ; --- Set up the initial state of the script ---
     InitializeState()
     
@@ -112,6 +117,21 @@ LoadSettings() {
         SETTINGS["OfflineImage"] := imageFolder . IniRead(iniFile, "Citrix", "OfflineImageName", "offline.png")
         SETTINGS["StayOnlineImage"] := imageFolder . IniRead(iniFile, "Citrix", "StayOnlineImageName", "stay_online.png")
         SETTINGS["OnlineImage"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName", "online.png")
+        ; دعم صور أونلاين إضافية اختيارية (ستُعامل مثل Online العادية)
+        SETTINGS["OnlineImage2"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName2", "online2.png")
+        SETTINGS["OnlineImage3"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName3", "online3.png")
+        SETTINGS["OnlineImage4"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName4", "online4.png")
+        ; ابنِ قائمة الصور المتاحة فعليًا
+        SETTINGS["OnlineImageList"] := []
+        try {
+            if (FileExist(SETTINGS["OnlineImage"]))
+                SETTINGS["OnlineImageList"].Push(SETTINGS["OnlineImage"])
+            for k in ["OnlineImage2","OnlineImage3","OnlineImage4"] {
+                if (SETTINGS.Has(k) && FileExist(SETTINGS[k]))
+                    SETTINGS["OnlineImageList"].Push(SETTINGS[k])
+            }
+        }
+        ; التوقيتات (القيم الافتراضية كما هي، سنفرض دقيقة بعد التحميل في InitializeScript)
         SETTINGS["WorkOnMyTicketImage"] := imageFolder . IniRead(iniFile, "Citrix", "WorkOnMyTicketImageName", "work_on_my_ticket.png")
         SETTINGS["LaunchImage"] := imageFolder . IniRead(iniFile, "Citrix", "LaunchImageName", "launch.png")
         SETTINGS["BreakImage"] := imageFolder . IniRead(iniFile, "Citrix", "BreakImageName", "break.png")

@@ -58,15 +58,17 @@ UpdateDashboard() {
     ; --- وضع العرض: مضغوط Alt أو مُثبّت عبر Ctrl+Alt+D ---
     isExpanded := GetKeyState("Alt", "P") || (STATE.Has("dashboardExpanded") ? STATE["dashboardExpanded"] : false)
 
-    ; لو موسّع: نكوّن نص البطارية بالمربعات
+    ; لو موسّع: لا نعرض مربعات البطارية، فقط النسبة
     batteryText := batteryPercentText
     if (isExpanded && battery >= 0) {
-        batteryBlocks := ""
-        filled := Floor(battery / 10)
-        Loop 10
-            batteryBlocks .= (A_Index <= filled) ? "■" : "□"
-        batteryText := "🔋 [" . batteryBlocks . "] " . batteryPercentText
+        ; إزالة رسم المربعات "■ □" كما طُلب
+        batteryText := batteryPercentText
     }
+    batteryBlocks := ""
+    filled := Floor(battery / 10)
+    Loop 10
+        batteryBlocks .= (A_Index <= filled) ? "■" : "□"
+    batteryText := "🔋 [" . batteryBlocks . "] " . batteryPercentText
 
     statusText := (STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "N/A")
     alarmText := alarmStatus
@@ -98,7 +100,10 @@ UpdateDashboard() {
 
     tooltipId := 20
     tooltipX := 10, tooltipY := 40
-    ; إخفاء تلقائي عند الوقوف على التولتيب
+
+    ; تحسين الإخفاء: عند وقوف الماوس داخل منطقة التولتيب، أخفِ وتعطيل العرض 1.5 ثانية لمنع الوميض/التهنيج
+    static hideUntilTick := 0
+
     lines := StrSplit(text, "`n")
     maxLen := 0
     for _, ln in lines {
@@ -108,11 +113,19 @@ UpdateDashboard() {
     }
     widthPx := Min(650, Max(200, maxLen * 7))
     heightPx := Max(18, lines.Length * 18)
-    MouseGetPos &mx, &my
-    if (mx >= tooltipX && mx <= tooltipX + widthPx && my >= tooltipY && my <= tooltipY + heightPx) {
+
+    if (A_TickCount < hideUntilTick) {
         ToolTip(, , , tooltipId)
         return
     }
+
+    MouseGetPos &mx, &my
+    if (mx >= tooltipX && mx <= tooltipX + widthPx && my >= tooltipY && my <= tooltipY + heightPx) {
+        ToolTip(, , , tooltipId)
+        hideUntilTick := A_TickCount + 1500
+        return
+    }
+
     ToolTip(text, tooltipX, tooltipY, tooltipId)
 }
 

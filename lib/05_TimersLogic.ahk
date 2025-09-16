@@ -21,12 +21,43 @@ StatusCheckTimer(*) {
     STATE["frontlineStatus"] := "Active"
     local statusArea := Map("x1", SETTINGS["StatusAreaTopLeftX"], "y1", SETTINGS["StatusAreaTopLeftY"], "x2", SETTINGS["StatusAreaBottomRightX"], "y2", SETTINGS["StatusAreaBottomRightY"])
     local knownStatusFound := false, foundX, foundY
-    local goodStates := ["Online", "WorkOnMyTicket", "Break", "Launch"]
+
+    ; أولًا: تحقق من أي صورة ضمن صور Online المتعددة
+    if (SETTINGS.Has("OnlineImageList") && SETTINGS["OnlineImageList"].Length > 0) {
+        for imgPath in SETTINGS["OnlineImageList"] {
+            if (ReliableImageSearch(&foundX, &foundY, imgPath, statusArea)) {
+                if (STATE["onlineStatus"] != "Online") {
+                    Info("Status changed to: Online")
+                    UpdateStatusDurations("Online")
+                    STATE["onlineStatus"] := "Online"
+                    STATE["offlineFixAttempts"] := 0
+                }
+                knownStatusFound := true
+                break
+            }
+        }
+        if (knownStatusFound)
+            return
+    } else {
+        ; رجوع للخيار القديم لو القائمة غير متاحة
+        if (ReliableImageSearch(&foundX, &foundY, SETTINGS["OnlineImage"], statusArea)) {
+            if (STATE["onlineStatus"] != "Online") {
+                Info("Status changed to: Online")
+                UpdateStatusDurations("Online")
+                STATE["onlineStatus"] := "Online"
+                STATE["offlineFixAttempts"] := 0
+            }
+            return
+        }
+    }
+
+    ; بقية الحالات الجيدة
+    local goodStates := ["WorkOnMyTicket", "Break", "Launch"]
     for stateName in goodStates {
         if (ReliableImageSearch(&foundX, &foundY, SETTINGS[stateName . "Image"], statusArea)) {
             if (STATE["onlineStatus"] != stateName) {
                 Info("Status changed to: " . stateName)
-                UpdateStatusDurations(stateName) ; تجميع مدة الحالة السابقة وتحديث الحالية
+                UpdateStatusDurations(stateName)
                 STATE["onlineStatus"] := stateName
                 STATE["offlineFixAttempts"] := 0
             }
@@ -38,6 +69,7 @@ StatusCheckTimer(*) {
         return
     }
 
+    ; Offline detection and fixes as-is
     if (ReliableImageSearch(&foundX, &foundY, SETTINGS["OfflineImage"], statusArea)) {
         if (STATE["onlineStatus"] != "Offline") {
             Info("OFFLINE status detected.")
@@ -132,7 +164,22 @@ MonitorTargetTimer(*) {
     targetArea := Map("x1", SETTINGS["TargetAreaTopLeftX"], "y1", SETTINGS["TargetAreaTopLeftY"], "x2", SETTINGS["TargetAreaBottomRightX"], "y2", SETTINGS["TargetAreaBottomRightY"])
     local foundX, foundY
     if (!ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], targetArea)) {
-        idlePhysical := A_TimeIdlePhysical  ; خمول فعلي من النظام
+        ; تأكد من الغياب 3 مرات خلال 3 ثواني (مرة كل ثانية)
+        confirmedMissing := true
+        Loop 3 {
+            Sleep(1000)
+            if (ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], targetArea)) {
+                confirmedMissing := false
+                Info("Target word re-appeared during triple-check. No alarm.")
+                break
+            }
+        }
+        if (!confirmedMissing) {
+            ; لا إنذار
+            return
+        }
+
+        idlePhysical := A_TimeIdlePhysical
         idleCombined := Max(idlePhysical, A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount))
         idleOk := idleCombined >= SETTINGS["UserIdleThreshold"]
         if !idleOk {
@@ -151,7 +198,6 @@ MonitorTargetTimer(*) {
         if (stayVisible) {
             Info("Target missing BUT Stay Online window is visible. Will attempt to dismiss it and re-check target.")
             ClickStayOnlineButton()
-            ; انتظر حتى 5 ثواني لإختفاء الزر وعودة التارجت
             attempts := 0
             Loop 5 {
                 Sleep(1000)
@@ -171,7 +217,9 @@ MonitorTargetTimer(*) {
                     break
                 }
             }
-            ; هنا حالتان: الزر اختفى والهدف لسه مش موجود، أو الزر لسه ظاهر
+            ; احفظ لقطة للمنطقة الحالية في مجلد target word قبل الإشعار
+            try SaveTargetWordScreenshot("target_missing")
+
             cause := "Unknown"
             if (ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea))
                 cause := "StayOnlineStillVisible"
@@ -193,7 +241,8 @@ MonitorTargetTimer(*) {
             return
         }
 
-        ; لو مفيش Stay Online ظهر، نتبع سلوك الإنذار المعتاد
+        ; لو مفيش Stay Online: احفظ لقطة ثم أنذر
+        try SaveTargetWordScreenshot("target_missing")
         if !STATE["isAlarmPlaying"] {
             STATE["isAlarmPlaying"] := true
             ShowLocalNotification("🚨 ALARM: Target Word NOT FOUND!")
