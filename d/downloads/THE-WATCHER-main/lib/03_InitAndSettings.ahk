@@ -23,3 +23,8 @@ MonitorResources(*) {
         LogError("Resource monitoring failed: " . err.Message)
     }
 }
+
+LoadSettings() {
+    SETTINGS["OnlineImage"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName", "online.png")
+    SETTINGS["OnlineImage2"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImage2Name", "online2.png")
+}
