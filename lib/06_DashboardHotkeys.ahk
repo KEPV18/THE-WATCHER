@@ -61,7 +61,7 @@ UpdateDashboard() {
     ; لو موسّع: لا نعرض مربعات البطارية، فقط النسبة
     batteryText := batteryPercentText
     if (isExpanded && battery >= 0) {
-        ; إزالة رسم المربعات "■ □" كما طُلب
+        ; إزالة رسم المربعات "■ □"
         batteryText := batteryPercentText
     }
     batteryBlocks := ""
@@ -100,8 +100,7 @@ UpdateDashboard() {
 
     tooltipId := 20
     tooltipX := 10, tooltipY := 40
-
-    ; تحسين الإخفاء: عند وقوف الماوس داخل منطقة التولتيب، أخفِ وتعطيل العرض 1.5 ثانية لمنع الوميض/التهنيج
+    ; منع التهنيج: عند الوقوف نخفي التولتيب ونؤجل إعادة عرضه 1.5 ثانية
     static hideUntilTick := 0
 
     lines := StrSplit(text, "`n")
@@ -148,11 +147,11 @@ UpdateDashboard() {
 
     if (STATE.Has("isAlarmPlaying") && STATE["isAlarmPlaying"]) {
         STATE["isAlarmPlaying"] := false
-        SetTimer(AlarmBeep, 0)
+        SetTimer(Func("AlarmBeep"), 0)
         STATE["offlineFixAttempts"] := 0
         STATE["isMonitoringPaused"] := true
         Info("Alarm stopped by CapsLock. Monitoring paused for " . (SETTINGS["ManualPauseDuration"]/1000) . " seconds.")
-        SetTimer(ResumeMonitoring, -SETTINGS["ManualPauseDuration"])
+        SetTimer(Func("ResumeMonitoring"), -SETTINGS["ManualPauseDuration"])
     }
     STATE["lastUserActivity"] := A_TickCount
 }

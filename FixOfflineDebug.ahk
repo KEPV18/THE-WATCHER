@@ -1,13 +1,19 @@
+; أعلى الملف - مقطع التهيئة التلقائية
 #Requires AutoHotkey v2.0
-#Include lib/04_Helpers.ahk
-#Include lib/02_Logging.ahk
+#Include lib\01_CoreSettings.ahk
+#Include lib\02_Logging.ahk
+#Include lib\07_GDIPlus.ahk
+#Include lib\04_Helpers.ahk
+#Include lib\03_InitAndSettings.ahk
 
-; تهيئة المتغيرات العامة
-global SETTINGS := Map()
+Gdip_Startup()
+OnExit("Gdip_Shutdown")
+CoordMode("Mouse", "Screen")
+SETTINGS := Map()
 global STATE := Map()
 
-; تحميل الإعدادات الأساسية
-SETTINGS := LoadSettings()
+; تحميل الإعدادات (بدون إسناد لقيمة راجعة)
+LoadSettings()
 
 ; دالة تتبع النقرات مع تأخير وتسجيل
 DebugEnsureOnlineStatus() {
@@ -49,10 +55,10 @@ ShowClickMarker(x, y) {
     Gui.BackColor := "Red"
     size := 20
     Gui.Show(Format("x{} y{} w{} h{}", x - size/2, y - size/2, size, size))
-    SetTimer(() => Gui.Destroy(), -1000)
+    SetTimer(ObjBindMethod(Gui, "Destroy"), -1000)
 }
 
-; دالة التحقق من الحالة الحالية
+; دالة التحقق من الحالة الحالية (تدعم صور Online المتعددة)
 GetCurrentStatus() {
     global SETTINGS
     statusArea := Map(
@@ -61,12 +67,24 @@ GetCurrentStatus() {
         "x2", SETTINGS["StatusAreaBottomRightX"],
         "y2", SETTINGS["StatusAreaBottomRightY"]
     )
-    
+
     local foundX, foundY
-    if (ReliableImageSearch(&foundX, &foundY, SETTINGS["OnlineImage"], statusArea))
-        return "Online"
+
+    ; لو عندنا قائمة صور Online متعددة، افحصها
+    if (SETTINGS.Has("OnlineImageList") && SETTINGS["OnlineImageList"].Length > 0) {
+        for imgPath in SETTINGS["OnlineImageList"] {
+            if (ReliableImageSearch(&foundX, &foundY, imgPath, statusArea))
+                return "Online"
+        }
+    } else {
+        ; رجوع للصورة الأساسية كاحتياطي
+        if (ReliableImageSearch(&foundX, &foundY, SETTINGS["OnlineImage"], statusArea))
+            return "Online"
+    }
+
     if (ReliableImageSearch(&foundX, &foundY, SETTINGS["OfflineImage"], statusArea))
         return "Offline"
+
     return "Unknown"
 }
 

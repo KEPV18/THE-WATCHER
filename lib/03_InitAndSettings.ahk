@@ -41,25 +41,25 @@ InitializeScript() {
     }
 
     ; --- Initialize all timers ---
-    SetTimer(StatusCheckTimer, SETTINGS["StatusCheckInterval"])
-    SetTimer(StayOnlineTimer, SETTINGS["StayOnlineInterval"])
-    SetTimer(RefreshTimer, SETTINGS["RefreshInterval"])
-    SetTimer(MonitorTargetTimer, SETTINGS["MainLoopInterval"])
-    SetTimer(UpdateDashboardTimer, 1000)
+    SetTimer(Func("StatusCheckTimer"), SETTINGS["StatusCheckInterval"])
+    SetTimer(Func("StayOnlineTimer"), SETTINGS["StayOnlineInterval"])
+    SetTimer(Func("RefreshTimer"), SETTINGS["RefreshInterval"])
+    SetTimer(Func("MonitorTargetTimer"), SETTINGS["MainLoopInterval"])
+    SetTimer(Func("UpdateDashboardTimer"), 1000)
     Info("Timers initialized. Running.")
-    ScheduleNextDailyReport() ; جدولة أول تقرير يومي عند 9 صباحًا القادم
+    Func("ScheduleNextDailyReport").Call() ; جدولة أول تقرير يومي عند 9 صباحًا القادم
 
     ; استعادة لقطـة الحالة إن وجدت
     try LoadStateSnapshot(A_ScriptDir "\state_snapshot.ini")
 
     ; تايمر فحص الإنترنت حسب الإعدادات
-    SetTimer(NetCheckTimer, SETTINGS.Has("NetCheckInterval") ? SETTINGS["NetCheckInterval"] : 15000)
+    SetTimer(Func("NetCheckTimer"), SETTINGS.Has("NetCheckInterval") ? SETTINGS["NetCheckInterval"] : 15000)
 
-    ; تايمر فحص البطارية (مرة كل دقيقة كفحص خفيف)
-    SetTimer(BatteryCheckTimer, 60000)
+    ; تايمر فحص البطارية (مرة كل minute كفحص خفيف)
+    SetTimer(Func("BatteryCheckTimer"), 60000)
 
     ; حفظ دوري للحالة
-    SetTimer(StateSaveTimer, SETTINGS.Has("StateSaveInterval") ? SETTINGS["StateSaveInterval"] : 300000)
+    SetTimer(Func("StateSaveTimer"), SETTINGS.Has("StateSaveInterval") ? SETTINGS["StateSaveInterval"] : 300000)
 
     ; حفظ عند الخروج
     OnExit(SaveStateOnExit)
@@ -117,11 +117,10 @@ LoadSettings() {
         SETTINGS["OfflineImage"] := imageFolder . IniRead(iniFile, "Citrix", "OfflineImageName", "offline.png")
         SETTINGS["StayOnlineImage"] := imageFolder . IniRead(iniFile, "Citrix", "StayOnlineImageName", "stay_online.png")
         SETTINGS["OnlineImage"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName", "online.png")
-        ; دعم صور أونلاين إضافية اختيارية (ستُعامل مثل Online العادية)
+        ; دعم صور أونلاين إضافية اختيارية (تعامل مثل Online العادية)
         SETTINGS["OnlineImage2"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName2", "online2.png")
         SETTINGS["OnlineImage3"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName3", "online3.png")
         SETTINGS["OnlineImage4"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName4", "online4.png")
-        ; ابنِ قائمة الصور المتاحة فعليًا
         SETTINGS["OnlineImageList"] := []
         try {
             if (FileExist(SETTINGS["OnlineImage"]))
@@ -131,7 +130,6 @@ LoadSettings() {
                     SETTINGS["OnlineImageList"].Push(SETTINGS[k])
             }
         }
-        ; التوقيتات (القيم الافتراضية كما هي، سنفرض دقيقة بعد التحميل في InitializeScript)
         SETTINGS["WorkOnMyTicketImage"] := imageFolder . IniRead(iniFile, "Citrix", "WorkOnMyTicketImageName", "work_on_my_ticket.png")
         SETTINGS["LaunchImage"] := imageFolder . IniRead(iniFile, "Citrix", "LaunchImageName", "launch.png")
         SETTINGS["BreakImage"] := imageFolder . IniRead(iniFile, "Citrix", "BreakImageName", "break.png")

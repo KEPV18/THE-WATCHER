@@ -84,35 +84,89 @@ StatusCheckTimer(*) {
             Info("Still OFFLINE. Attempting fix, attempt #" . STATE["offlineFixAttempts"])
             EnsureOnlineStatus()
             if (STATE["offlineFixAttempts"] >= 3 && !STATE["isAlarmPlaying"]) {
-                Info("CRITICAL: Offline fix failed 3 times. Triggering alarm.")
-                STATE["isAlarmPlaying"] := true
-                ShowLocalNotification("🚨 ALARM: Offline fix FAILED!")
-                SendRichTelegramNotification("🚨 ALARM: Offline Fix Failed", Map("Attempts", STATE["offlineFixAttempts"], "Action", "Manual intervention required!"))
-                SetTimer(AlarmBeep, 300)
+                2) إصلاح استدعاء المؤقت للمنبّه
+                StatusCheckTimer(*) {
+                    global SETTINGS, STATE
+                    if !IsObject(STATE) {
+                        LogError("STATE object lost in StatusCheckTimer.")
+                        return
+                    }
+                    STATE["lastStatusCheckTime"] := A_TickCount
+                    STATE["lastStatusCheckTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
+                    if !WinExist(SETTINGS["FrontlineWinTitle"]) {
+                        if (STATE["frontlineStatus"] != "Missing") {
+                            STATE["frontlineStatus"] := "Missing"
+                            Info("Front Line window not found. Attempting to restart app.")
+                            StartApp(SETTINGS["FrontlineShortcutName"], "frontlineStatus")
+                        }
+                        return
+                    }
+                    STATE["frontlineStatus"] := "Active"
+                    local statusArea := Map("x1", SETTINGS["StatusAreaTopLeftX"], "y1", SETTINGS["StatusAreaTopLeftY"], "x2", SETTINGS["StatusAreaBottomRightX"], "y2", SETTINGS["StatusAreaBottomRightY"])
+                    local knownStatusFound := false, foundX, foundY
+                    ; زيادة عداد المحاولة
+                    if !STATE.Has("offlineFixAttempts")
+                        STATE["offlineFixAttempts"] := 0
+                    STATE["offlineFixAttempts"]++
+                    
+                    attempt := STATE["offlineFixAttempts"]
+                    ShowLocalNotification("❗ Status is OFFLINE! Attempting fix... (Attempt #" . attempt . ")")
+                    SendRichTelegramNotification("❗ Offline Detected", Map("Attempting Fix", "Yes", "Attempt #", attempt))
+                    Info("Attempting offline fix, attempt #" . attempt)
+                    
+                    ; تنفيذ خطوات الإصلاح
+                    EnsureOnlineStatus()
+                    
+                    ; انتظار قصير ثم إعادة التحقق من النجاح
+                    verifyDelay := SETTINGS.Has("PostFixVerifyDelay") ? SETTINGS["PostFixVerifyDelay"] : 3000
+                    Sleep(verifyDelay)
+                    
+                    if (IsOnlineNow()) {
+                        ; نجح الإصلاح
+                        STATE["offlineFixAttempts"] := 0
+                        ShowLocalNotification("✅ Offline Fix Succeeded (Attempt #" . attempt . ")")
+                        SendRichTelegramNotification("✅ Offline Fix Succeeded", Map(
+                            "Attempt #", attempt,
+                            "Time", FormatTime(A_Now, "HH:mm:ss")
+                        ))
+                        Info("Offline fix succeeded on attempt #" . attempt)
+                    } else {
+                        ; ما زال Offline
+                        if (STATE["offlineFixAttempts"] >= 3 && !STATE["isAlarmPlaying"]) {
+                            Info("CRITICAL: Offline fix failed after 3 attempts. Triggering alarm.")
+                            STATE["isAlarmPlaying"] := true
+                            ShowLocalNotification("🚨 ALARM: Offline fix FAILED!")
+                            SendRichTelegramNotification("🚨 ALARM: Offline Fix Failed", Map("Attempts", STATE["offlineFixAttempts"], "Action", "Manual intervention required!"))
+                            SetTimer(Func("AlarmBeep"), 300)
+                        } else {
+                            Info("Still OFFLINE after attempt #" . attempt . ". Will retry on next cycle.")
+                        }
+                    }
+                    return
+                }
             }
+            knownStatusFound := true
         }
-        knownStatusFound := true
-    }
-    if (knownStatusFound) {
-        return
-    }
+        if (knownStatusFound) {
+            return
+        }
 
-    if (STATE["onlineStatus"] != "Unknown") {
-        Info("Online status is now definitively UNKNOWN.")
-        UpdateStatusDurations("Unknown") ; تجميع مدة الحالة السابقة وتحديث الحالية
-        STATE["onlineStatus"] := "Unknown"
-        STATE["offlineFixAttempts"] := 0
+        if (STATE["onlineStatus"] != "Unknown") {
+            Info("Online status is now definitively UNKNOWN.")
+            UpdateStatusDurations("Unknown") ; تجميع مدة الحالة السابقة وتحديث الحالية
+            STATE["onlineStatus"] := "Unknown"
+            STATE["offlineFixAttempts"] := 0
+        }
+        Info("Attempting to save and send a screenshot for the 'Unknown' state...")
+        screenshotResult := SaveStatusScreenshotEnhanced("unknown_status")
+        if (IsObject(screenshotResult) && screenshotResult.ok) {
+            Info("Successfully saved screenshot: " . screenshotResult.file)
+            caption := "🤔 Unknown Status Detected`nI couldn't recognize the status. Here is what I see in the status area."
+            SendTelegramPhoto(screenshotResult.file, caption)
+        } else {
+            Warn("Failed to save screenshot for unknown status. Check coordinates and permissions.")
+        }
     }
-    Info("Attempting to save and send a screenshot for the 'Unknown' state...")
-    screenshotResult := SaveStatusScreenshotEnhanced("unknown_status")
-    if (IsObject(screenshotResult) && screenshotResult.ok) {
-        Info("Successfully saved screenshot: " . screenshotResult.file)
-        caption := "🤔 Unknown Status Detected`nI couldn't recognize the status. Here is what I see in the status area."
-        SendTelegramPhoto(screenshotResult.file, caption)
-    } else {
-        Warn("Failed to save screenshot for unknown status. Check coordinates and permissions.")
-    }
-}
 
 EnsureOnlineStatus() {
     global SETTINGS
@@ -164,7 +218,7 @@ MonitorTargetTimer(*) {
     targetArea := Map("x1", SETTINGS["TargetAreaTopLeftX"], "y1", SETTINGS["TargetAreaTopLeftY"], "x2", SETTINGS["TargetAreaBottomRightX"], "y2", SETTINGS["TargetAreaBottomRightY"])
     local foundX, foundY
     if (!ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], targetArea)) {
-        ; تأكد من الغياب 3 مرات خلال 3 ثواني (مرة كل ثانية)
+        ; تأكيد الغياب 3 مرات خلال 3 ثوانٍ
         confirmedMissing := true
         Loop 3 {
             Sleep(1000)
@@ -175,7 +229,6 @@ MonitorTargetTimer(*) {
             }
         }
         if (!confirmedMissing) {
-            ; لا إنذار
             return
         }
 
@@ -191,7 +244,7 @@ MonitorTargetTimer(*) {
             return
         }
 
-        ; --- منطق التحقق من زر Stay Online قبل الإنذار ---
+        ; --- منطق زر Stay Online ---
         stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
         local sX, sY
         stayVisible := ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)
@@ -217,7 +270,7 @@ MonitorTargetTimer(*) {
                     break
                 }
             }
-            ; احفظ لقطة للمنطقة الحالية في مجلد target word قبل الإشعار
+            ; احفظ لقطة للمنطقة في مجلد target word قبل الإنذار
             try SaveTargetWordScreenshot("target_missing")
 
             cause := "Unknown"
@@ -241,7 +294,7 @@ MonitorTargetTimer(*) {
             return
         }
 
-        ; لو مفيش Stay Online: احفظ لقطة ثم أنذر
+        ; لا يوجد Stay Online: احفظ لقطة ثم أنذر
         try SaveTargetWordScreenshot("target_missing")
         if !STATE["isAlarmPlaying"] {
             STATE["isAlarmPlaying"] := true
@@ -254,13 +307,13 @@ MonitorTargetTimer(*) {
             )
             SendRichTelegramNotification("🚨 ALARM: Target Word Missing!", details)
             SetTimer(AlarmBeep, 300)
-        }
-    } else {
-        if (STATE["isAlarmPlaying"]) {
-            STATE["isAlarmPlaying"] := false
-            SetTimer(AlarmBeep, 0)
-            STATE["lastUserActivity"] := A_TickCount + SETTINGS["WordMonitorUserIdleReset"]
-            Info("Alarm stopped - Target word found.")
+        } else {
+            if (STATE["isAlarmPlaying"]) {
+                STATE["isAlarmPlaying"] := false
+                SetTimer(Func("AlarmBeep"), 0)
+                STATE["lastUserActivity"] := A_TickCount + SETTINGS["WordMonitorUserIdleReset"]
+                Info("Alarm stopped - Target word found.")
+            }
         }
     }
 }
@@ -268,7 +321,7 @@ MonitorTargetTimer(*) {
 AlarmBeep(*) {
     global SETTINGS, STATE
     if !STATE.Has("isAlarmPlaying") || !STATE["isAlarmPlaying"] {
-        SetTimer(AlarmBeep, 0)
+        SetTimer(Func("AlarmBeep"), 0)
         return
     }
     SoundBeep(SETTINGS["BeepFrequency"], SETTINGS["BeepDuration"])
