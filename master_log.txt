@@ -18,3 +18,124 @@ Line: 44
 Error: Invalid base.
 File: D:\downloads\THE-WATCHER-main\lib\03_InitAndSettings.ahk
 Line: 44
+[20250917050357] [INFO] STATE Map has been re-initialized.
+[20250917050357] [INFO] STATE Map has been re-initialized.
+[20250917050357] [INFO] --- Script Starting ---
+[20250917050357] [INFO] SelfTest: All required files/shortcuts found.
+[20250917050357] [INFO] Frontline not found on start. Attempting to launch.
+[20250917050357] [INFO] Front Line launched from shortcut.
+[20250917050412] [WARN] Failed to init StatusCheckTimer: Invalid base.
+[20250917050412] [WARN] Failed to init StayOnlineTimer: Invalid base.
+[20250917050412] [WARN] Failed to init RefreshTimer: Invalid base.
+[20250917050412] [WARN] Failed to init MonitorTargetTimer: Invalid base.
+[20250917050412] [INFO] Timers initialized. Running.
+[20250917050412] [WARN] Failed to schedule daily report: Invalid base.
+[20250917050412] [ERROR] --- UNHANDLED SCRIPT CRASH ---
+Error: Invalid base.
+File: D:\downloads\THE-WATCHER-main\lib\03_InitAndSettings.ahk
+Line: 82
+[20250917073513] [INFO] STATE Map has been re-initialized.
+[20250917073513] [INFO] STATE Map has been re-initialized.
+[20250917073513] [WARN] Telegram is disabled: missing BOT_TOKEN/CHAT_ID. All Telegram sends will be skipped.
+[20250917073513] [INFO] --- Script Starting ---
+[20250917073513] [INFO] SelfTest: All required files/shortcuts found.
+[20250917073513] [INFO] Frontline not found on start. Attempting to launch.
+[20250917073513] [INFO] Front Line launched from shortcut.
+[20250917073528] [INFO] Timers initialized. Running.
+[20250917073528] [INFO] Daily report scheduled at: 2025-09-17 09:00:00
+[20250917073528] [INFO] STATE Map has been re-initialized.
+[20250917073528] [INFO] Master script loaded and initialized successfully.
+[20250917075127] [INFO] STATE Map has been re-initialized.
+[20250917075127] [INFO] STATE Map has been re-initialized.
+[20250917075127] [WARN] Telegram is disabled: missing BOT_TOKEN/CHAT_ID. All Telegram sends will be skipped.
+[20250917075127] [INFO] --- Script Starting ---
+[20250917075127] [INFO] SelfTest: All required files/shortcuts found.
+[20250917075127] [INFO] Frontline not found on start. Attempting to launch.
+[20250917075127] [INFO] Front Line launched from shortcut.
+[20250917075142] [INFO] Timers initialized. Running.
+[20250917075142] [INFO] STATE Map has been re-initialized.
+[20250917075142] [INFO] Master script loaded and initialized successfully.
+[20250917075242] [INFO] Front Line window not found. Attempting to restart app.
+[20250917075242] [INFO] Front Line launched from shortcut.
+[20250917075342] [INFO] Front Line window not found. Attempting to restart app.
+[20250917075342] [INFO] Front Line launched from shortcut.
+[20250917075442] [INFO] Front Line window not found. Attempting to restart app.
+[20250917075442] [INFO] Front Line launched from shortcut.
+[20250917075542] [INFO] Front Line window not found. Attempting to restart app.
+[20250917075542] [INFO] Front Line launched from shortcut.
+[20250917075642] [INFO] Front Line window not found. Attempting to restart app.
+[20250917075642] [INFO] Front Line launched from shortcut.
+[20250917075742] [INFO] Front Line window not found. Attempting to restart app.
+[20250917075742] [INFO] Front Line launched from shortcut.
+[20250917075842] [INFO] Front Line window not found. Attempting to restart app.
+[20250917075842] [INFO] Front Line launched from shortcut.
+[20250917075942] [INFO] Front Line window not found. Attempting to restart app.
+[20250917075942] [INFO] Front Line launched from shortcut.
+[20250917075949] [WARN] SendRichTelegramNotification skipped: missing BOT_TOKEN/CHAT_ID
+[20250917075949] [INFO] STATE Map has been re-initialized.
+[20250917075949] [INFO] STATE Map has been re-initialized.
+[20250917075949] [WARN] Telegram is disabled: missing BOT_TOKEN/CHAT_ID. All Telegram sends will be skipped.
+[20250917075949] [INFO] --- Script Starting ---
+[20250917075949] [INFO] SelfTest: All required files/shortcuts found.
+[20250917075949] [INFO] Frontline not found on start. Attempting to launch.
+[20250917075949] [INFO] Front Line launched from shortcut.
+[20250917080004] [INFO] Timers initialized. Running.
+[20250917080004] [INFO] STATE Map has been re-initialized.
+[20250917080004] [INFO] Master script loaded and initialized successfully.
+[20250917080104] [INFO] Front Line window not found. Attempting to restart app.
+[20250917080104] [INFO] Front Line launched from shortcut.
+[20250917080204] [INFO] Front Line window not found. Attempting to restart app.
+[20250917080204] [INFO] Front Line launched from shortcut.
+[20250917080304] [INFO] Front Line window not found. Attempting to restart app.
+[20250917080304] [INFO] Front Line launched from shortcut.
+[20250917080404] [INFO] Front Line window not found. Attempting to restart app.
+[20250917080404] [INFO] Front Line launched from shortcut.
+[20250917080504] [INFO] Front Line window not found. Attempting to restart app.
+[20250917080504] [INFO] Front Line launched from shortcut.
+[20250917080604] [INFO] Front Line window not found. Attempting to restart app.
+[20250917080604] [INFO] Front Line launched from shortcut.
+[20250917080704] [INFO] Front Line window not found. Attempting to restart app.
+[20250917080704] [INFO] Front Line launched from shortcut.
+[20250917080804] [INFO] Front Line window not found. Attempting to restart app.
+[20250917080804] [INFO] Front Line launched from shortcut.
+[20250917080904] [INFO] Front Line window not found. Attempting to restart app.
+[20250917080904] [INFO] Front Line launched from shortcut.
+[20250917081004] [INFO] Front Line window not found. Attempting to restart app.
+[20250917081004] [INFO] Front Line launched from shortcut.
+[20250917081104] [INFO] Front Line window not found. Attempting to restart app.
+[20250917081104] [INFO] Front Line launched from shortcut.
+[20250917081204] [INFO] Front Line window not found. Attempting to restart app.
+[20250917081204] [INFO] Front Line launched from shortcut.
+[20250917081304] [INFO] Front Line window not found. Attempting to restart app.
+[20250917081304] [INFO] Front Line launched from shortcut.
+[20250917081404] [INFO] Front Line window not found. Attempting to restart app.
+[20250917081404] [INFO] Front Line launched from shortcut.
+[20250917081504] [INFO] Front Line window not found. Attempting to restart app.
+[20250917081504] [INFO] Front Line launched from shortcut.
+[20250917081604] [INFO] Front Line window not found. Attempting to restart app.
+[20250917081604] [INFO] Front Line launched from shortcut.
+[20250917081704] [INFO] Front Line window not found. Attempting to restart app.
+[20250917081704] [INFO] Front Line launched from shortcut.
+[20250917081804] [INFO] Front Line window not found. Attempting to restart app.
+[20250917081804] [INFO] Front Line launched from shortcut.
+[20250917081904] [INFO] Front Line window not found. Attempting to restart app.
+[20250917081904] [INFO] Front Line launched from shortcut.
+[20250917082004] [INFO] Front Line window not found. Attempting to restart app.
+[20250917082004] [INFO] Front Line launched from shortcut.
+[20250917082100] [WARN] SendRichTelegramNotification skipped: missing BOT_TOKEN/CHAT_ID
+[20250917220838] [INFO] STATE Map has been re-initialized.
+[20250917220838] [INFO] STATE Map has been re-initialized.
+[20250917220838] [WARN] Telegram is disabled: missing BOT_TOKEN/CHAT_ID. All Telegram sends will be skipped.
+[20250917220838] [INFO] --- Script Starting ---
+[20250917220838] [INFO] SelfTest: All required files/shortcuts found.
+[20250917220838] [INFO] Frontline not found on start. Attempting to launch.
+[20250917220838] [INFO] Front Line launched from shortcut.
+[20250917220853] [INFO] Timers initialized. Running.
+[20250917220853] [INFO] STATE Map has been re-initialized.
+[20250917220853] [INFO] Master script loaded and initialized successfully.
+[20250917220953] [INFO] Front Line window not found. Attempting to restart app.
+[20250917220953] [INFO] Front Line launched from shortcut.
+[20250917221053] [INFO] Front Line window not found. Attempting to restart app.
+[20250917221053] [INFO] Front Line launched from shortcut.
+[20250917221153] [INFO] Front Line window not found. Attempting to restart app.
+[20250917221153] [INFO] Front Line launched from shortcut.

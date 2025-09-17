@@ -3,7 +3,7 @@
 ; ============================================================
 
 InitializeScript() {
-    global SETTINGS, STATE, SCREENSHOT_DIR
+    global SETTINGS, STATE, SCREENSHOT_DIR, BOT_TOKEN, CHAT_ID
     
     ; --- Load all settings from the .ini file ---
     LoadSettings()
@@ -15,6 +15,14 @@ InitializeScript() {
 
     ; --- Set up the initial state of the script ---
     InitializeState()
+    
+    ; تحديد تفعيل تيليجرام بناءً على مفاتيئة
+    STATE["telegramEnabled"] := (!!BOT_TOKEN && !!CHAT_ID)
+    if (!STATE["telegramEnabled"]) {
+        try Warn("Telegram is disabled: missing BOT_TOKEN/CHAT_ID. All Telegram sends will be skipped.")
+    } else {
+        Info("Telegram is enabled: BOT_TOKEN/CHAT_ID loaded.")
+    }
     
     ; --- Create screenshots directory if it doesn't exist ---
     if !DirExist(SCREENSHOT_DIR)
@@ -41,25 +49,25 @@ InitializeScript() {
     }
 
     ; --- Initialize all timers ---
-    SetTimer(Func("StatusCheckTimer"), SETTINGS["StatusCheckInterval"])
-    SetTimer(Func("StayOnlineTimer"), SETTINGS["StayOnlineInterval"])
-    SetTimer(Func("RefreshTimer"), SETTINGS["RefreshInterval"])
-    SetTimer(Func("MonitorTargetTimer"), SETTINGS["MainLoopInterval"])
-    SetTimer(Func("UpdateDashboardTimer"), 1000)
+    SetTimer(StatusCheckTimer, SETTINGS["StatusCheckInterval"])
+    SetTimer(StayOnlineTimer, SETTINGS["StayOnlineInterval"]) 
+    SetTimer(RefreshTimer, SETTINGS["RefreshInterval"]) 
+    SetTimer(MonitorTargetTimer, SETTINGS["MainLoopInterval"]) 
+    SetTimer(UpdateDashboardTimer, 1000)
     Info("Timers initialized. Running.")
-    Func("ScheduleNextDailyReport").Call() ; جدولة أول تقرير يومي عند 9 صباحًا القادم
+    ; ScheduleNextDailyReport() ; تم إيقاف التقرير اليومي المجدول بناءً على طلبك
 
     ; استعادة لقطـة الحالة إن وجدت
     try LoadStateSnapshot(A_ScriptDir "\state_snapshot.ini")
 
     ; تايمر فحص الإنترنت حسب الإعدادات
-    SetTimer(Func("NetCheckTimer"), SETTINGS.Has("NetCheckInterval") ? SETTINGS["NetCheckInterval"] : 15000)
+    SetTimer(NetCheckTimer, SETTINGS.Has("NetCheckInterval") ? SETTINGS["NetCheckInterval"] : 1000)
 
-    ; تايمر فحص البطارية (مرة كل minute كفحص خفيف)
-    SetTimer(Func("BatteryCheckTimer"), 60000)
+    ; تايمر فحص البطارية (مرة كل دقيقة كفحص خفيف)
+    SetTimer(BatteryCheckTimer, 60000)
 
     ; حفظ دوري للحالة
-    SetTimer(Func("StateSaveTimer"), SETTINGS.Has("StateSaveInterval") ? SETTINGS["StateSaveInterval"] : 300000)
+    SetTimer(StateSaveTimer, SETTINGS.Has("StateSaveInterval") ? SETTINGS["StateSaveInterval"] : 300000)
 
     ; حفظ عند الخروج
     OnExit(SaveStateOnExit)
@@ -105,6 +113,8 @@ InitializeState() {
     STATE["netLastChangeTick"] := A_TickCount
     STATE["netDowntimeMs"] := 0
     STATE["telegramQueue"] := []  ; رسائل مؤجلة عند انقطاع النت
+    STATE["telegramEnabled"] := false
+    STATE["isNetAlarmPlaying"] := false
     Info("STATE Map has been re-initialized.")
 }
 
@@ -117,10 +127,11 @@ LoadSettings() {
         SETTINGS["OfflineImage"] := imageFolder . IniRead(iniFile, "Citrix", "OfflineImageName", "offline.png")
         SETTINGS["StayOnlineImage"] := imageFolder . IniRead(iniFile, "Citrix", "StayOnlineImageName", "stay_online.png")
         SETTINGS["OnlineImage"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName", "online.png")
-        ; دعم صور أونلاين إضافية اختيارية (تعامل مثل Online العادية)
+        ; دعم صور أونلاين إضافية اختيارية (ستُعامل مثل Online العادية)
         SETTINGS["OnlineImage2"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName2", "online2.png")
         SETTINGS["OnlineImage3"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName3", "online3.png")
         SETTINGS["OnlineImage4"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName4", "online4.png")
+        ; ابنِ قائمة الصور المتاحة فعليًا
         SETTINGS["OnlineImageList"] := []
         try {
             if (FileExist(SETTINGS["OnlineImage"]))
@@ -130,6 +141,7 @@ LoadSettings() {
                     SETTINGS["OnlineImageList"].Push(SETTINGS[k])
             }
         }
+        ; التوقيتات (القيم الافتراضية كما هي، سنفرض دقيقة بعد التحميل في InitializeScript)
         SETTINGS["WorkOnMyTicketImage"] := imageFolder . IniRead(iniFile, "Citrix", "WorkOnMyTicketImageName", "work_on_my_ticket.png")
         SETTINGS["LaunchImage"] := imageFolder . IniRead(iniFile, "Citrix", "LaunchImageName", "launch.png")
         SETTINGS["BreakImage"] := imageFolder . IniRead(iniFile, "Citrix", "BreakImageName", "break.png")
@@ -166,10 +178,11 @@ LoadSettings() {
         SETTINGS["ImageSearchTolerance"] := IniRead(iniFile, "Search", "Tolerance", 30)
 
         ; --- إعدادات إضافية ---
-        SETTINGS["NetCheckInterval"] := IniRead(iniFile, "Timings", "NetCheckInterval", 15000)
-        SETTINGS["StateSaveInterval"] := IniRead(iniFile, "Persistence", "StateSaveInterval", 300000)
-        SETTINGS["BatteryAlertThreshold"] := IniRead(iniFile, "Battery", "AlertThreshold", 20)
-        SETTINGS["BatteryAlertCooldown"] := IniRead(iniFile, "Battery", "AlertCooldownMs", 1800000) ; 30 دقيقة
+        SETTINGS["NetCheckInterval"] := IniRead(iniFile, "Timings", "NetCheckInterval", 1000)
+        SETTINGS["NetCheckTimeoutMs"] := IniRead(iniFile, "Network", "CheckTimeoutMs", 800)
+         SETTINGS["StateSaveInterval"] := IniRead(iniFile, "Persistence", "StateSaveInterval", 300000)
+         SETTINGS["BatteryAlertThreshold"] := IniRead(iniFile, "Battery", "AlertThreshold", 20)
+         SETTINGS["BatteryAlertCooldown"] := IniRead(iniFile, "Battery", "AlertCooldownMs", 1800000) ; 30 دقيقة
     } catch as ex {
         MsgBox("Error reading settings.ini:`n" . ex.Message, "Configuration Error", 4112)
         ExitApp
@@ -177,8 +190,34 @@ LoadSettings() {
 }
 
 SaveStateOnExit(*) {
-    ; حفظ الحالة عند الخروج
+    ; حفظ الحالة عند الخروج + إرسال تقرير الجلسة عند الإنهاء
     try SaveStateSnapshot(A_ScriptDir "\state_snapshot.ini")
+    
+    ; إرسال تقرير مختصر بالجلسة عند الخروج
+    try {
+        global STATE
+        ; جمع آخر مدة للحالة الحالية
+        UpdateStatusDurations(STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "Unknown")
+        startedAt := STATE.Has("scriptStartTime") ? STATE["scriptStartTime"] : A_Now
+        periodFrom := STATE.Has("lastReportTime") ? STATE["lastReportTime"] : startedAt
+        periodTo := A_Now
+
+        details := Map(
+            "Script Started", FormatTime(startedAt, "yyyy-MM-dd HH:mm:ss"),
+            "Period", FormatTime(periodFrom, "yyyy-MM-dd HH:mm") . " → " . FormatTime(periodTo, "yyyy-MM-dd HH:mm"),
+            "Online", FormatMs(STATE["statusDurations"]["Online"]),
+            "WorkOnMyTicket", FormatMs(STATE["statusDurations"]["WorkOnMyTicket"]),
+            "Launch", FormatMs(STATE["statusDurations"]["Launch"]),
+            "Offline", FormatMs(STATE["statusDurations"]["Offline"]),
+            "Unknown", FormatMs(STATE["statusDurations"]["Unknown"]),
+            "Net Downtime", STATE.Has("netDowntimeMs") ? FormatMs(STATE["netDowntimeMs"]) : "00h 00m 00s"
+        )
+        SendRichTelegramNotification("📊 Session Report (on exit)", details)
+        if IsObject(STATE)
+            STATE["lastTelegramStatus"] := "Exit report sent at " . FormatTime(A_Now, "HH:mm:ss")
+    } catch {
+        ; ignore
+    }
 }
 
 StateSaveTimer(*) {

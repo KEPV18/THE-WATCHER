@@ -6,8 +6,9 @@
 #SingleInstance Force
 
 ; -------------- Config --------------
-global BOT_TOKEN := "8328100113:AAEEtm8w7Em7eqSVSjq8yiG5nPu7JNBz9Nk"
-global CHAT_ID   := "5670001305"
+; قراءة الإعدادات العامة ومن ضمنها BOT_TOKEN/CHAT_ID عبر ملف الكور
+#Include "lib\01_CoreSettings.ahk"
+
 global SCRIPT_TO_RUN := A_ScriptDir "\master.ahk"
 global SCRIPT_NAME   := "MasterDashboard"
 global ERROR_LOG     := A_ScriptDir "\last_error.log"
@@ -25,7 +26,7 @@ Loop {
         ReportCatastrophicFailure(exitCode, fullError)
         response := MsgBox(
             "The main script (" SCRIPT_NAME ") has crashed.`n"
-            "A detailed failure report has been sent to Telegram.`n`n"
+            "A detailed failure report has been saved locally and, if configured, sent to Telegram.`n`n"
             "Do you want to try restarting it?",
             "Critical Failure", 36)
 
@@ -102,6 +103,16 @@ ReportCatastrophicFailure(errorCode, errorText := "") {
     ErrorMessage := header . fileLineText . "`n`n📜 Error Output:`n" . errDisplay . "`n`n" .
                     "Time: " . FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss")
 
+    ; إذا لم تكن مفاتيح تيليجرام مضبوطة، احفظ محليًا وتخطى الإرسال
+    if (!BOT_TOKEN || !CHAT_ID) {
+        try {
+            FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") . " - Telegram disabled (missing keys). Saved locally." . "`n", A_ScriptDir "\watcher_send_error.log", "UTF-8")
+            FileAppend(ErrorMessage . "`n`n", A_ScriptDir "\watcher_send_error.log", "UTF-8")
+        } catch {
+        }
+        return
+    }
+
     ; Send with POST
     TelegramURL := "https://api.telegram.org/bot" . BOT_TOKEN . "/sendMessage"
     body := "chat_id=" . CHAT_ID . "&text=" . UriEncode(ErrorMessage)
@@ -109,6 +120,7 @@ ReportCatastrophicFailure(errorCode, errorText := "") {
     try {
         Req := ComObject("WinHttp.WinHttpRequest.5.1")
         Req.Open("POST", TelegramURL, false)
+        Req.SetTimeouts(2000, 2000, 2000, 2000)
         Req.SetRequestHeader("Content-Type", "application/x-www-form-urlencoded")
         Req.Send(body)
 
@@ -131,7 +143,7 @@ ReportCatastrophicFailure(errorCode, errorText := "") {
 
     ; archive locally
     try {
-        FileAppend("==== " . FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") . " ====`n", A_ScriptDir "\last_error_archive.log", "UTF-8")
+        FileAppend("==== " . FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") . " ====\n", A_ScriptDir "\last_error_archive.log", "UTF-8")
         FileAppend(ErrorMessage . "`n`n", A_ScriptDir "\last_error_archive.log", "UTF-8")
     } catch {
     }

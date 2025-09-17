@@ -1,0 +1,11 @@
+2025-09-17 16:54:58	lib/04_Helpers.ahk	[SendTelegramError] Added network timeouts and proper try/catch guards; ensure STATE.lastTelegramStatus updated on failures.
+2025-09-17 16:54:58	lib/03_InitAndSettings.ahk	[Settings] Added Network.CheckTimeoutMs (default 800ms) and set Timings.NetCheckInterval default to 1000ms; initialized STATE.isNetAlarmPlaying=false.
+2025-09-17 16:54:58	lib/05_TimersLogic.ahk	[NetCheckTimer] Uses SETTINGS.NetCheckTimeoutMs; manages isNetAlarmPlaying to start/stop AlarmBeep on internet loss/restore; queues and flushes Telegram messages.
+2025-09-17 16:54:58	lib/06_DashboardHotkeys.ahk	[Dashboard] Cleaned battery display (no emojis); standardized wording to "Network"; removed stray diff markers.
+2025-09-17 10:00:00	lib/04_Helpers.ahk	[SendTelegramPhoto] Added credential guard (BOT_TOKEN/CHAT_ID) to skip sending and update STATE.lastTelegramStatus when missing.
+2025-09-17 10:00:00	lib/04_Helpers.ahk	[SendTelegramPhoto] Fixed binary file read: use Buffer + RawRead(buffer) instead of RawRead(&var) into uninitialized memory.
+2025-09-17 10:00:00	lib/04_Helpers.ahk	[SendTelegramPhoto] Corrected multipart payload sizing with CP0 byte counts (exclude null terminator) and append trailer safely.
+2025-09-17 10:00:00	lib/04_Helpers.ahk	[SendTelegramPhoto] Added network timeouts via WinHttpRequest.SetTimeouts(2000,2000,2000,2000) to avoid long hangs.
+2025-09-17 10:15:00	THE-WATCHER-0134.../lib/01_CoreSettings.ahk	Removed hardcoded BOT_TOKEN/CHAT_ID; now read from settings.ini or TELEGRAM_* env vars to avoid secrets in repo and unify config.
+2025-09-17 10:17:00	THE-WATCHER-0134.../Watcher.ahk	Removed hardcoded BOT_TOKEN/CHAT_ID; now includes lib/01_CoreSettings.ahk and added guard if keys missing.
+2025-09-17 10:22:00	lib/04_Helpers.ahk	[SendTelegramError] Fixed syntax error: removed unnecessary try/catch around Warn() guard; added SetTimeouts to network request.

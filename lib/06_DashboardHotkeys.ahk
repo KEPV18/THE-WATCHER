@@ -14,10 +14,11 @@ UpdateDashboard() {
     }
 
     battery := GetBatteryPercent()
-    ; لا ننشئ شكل المربعات إلا لو هنستخدم الوضع الموسع
+    ; لا نستخدم أي رموز أو تزيينات للبطارية، نسبة فقط
     batteryPercentText := (battery = -1) ? "N/A" : battery . "%"
-    if (battery != -1 && battery <= 20)
-        batteryPercentText := "⚠ " . batteryPercentText
+    ; أزلنا رمز التحذير ⚠ للحفاظ على بساطة العرض
+    ; if (battery != -1 && battery <= 20)
+    ;     batteryPercentText := "⚠ " . batteryPercentText
 
     ; خمول فعلي من النظام + آخر نشاط داخلي
     idlePhysical := A_TimeIdlePhysical
@@ -35,20 +36,18 @@ UpdateDashboard() {
     }
 
     ; --- مؤشر الإنترنت ---
-    netLine := "Net: N/A"
+    netLine := "Network: N/A"
     if (STATE.Has("netOnline")) {
-        if (STATE["netOnline"]) {
-            netLine := "Net: ✅ Online"
-        } else {
-            offlineElapsed := A_TickCount - (STATE.Has("netLastChangeTick") ? STATE["netLastChangeTick"] : A_TickCount)
-            if (offlineElapsed < 0)
-                offlineElapsed := 0
-            netLine := "Net: ❌ Offline (" . (offlineElapsed // 60000) . "m " . Mod(offlineElapsed // 1000, 60) . "s)"
-        }
+    if (STATE["netOnline"]) {
+    netLine := "Network: ✅ Online"
+    } else {
+    offlineElapsed := A_TickCount - (STATE.Has("netLastChangeTick") ? STATE["netLastChangeTick"] : A_TickCount)
+    netLine := "Network: ❌ Offline (" . (offlineElapsed // 60000) . "m " . Mod(offlineElapsed // 1000, 60) . "s)"
+    }
     }
 
-    ; --- آخر حالة تيليجرام ---
-    lastTG := STATE.Has("lastTelegramStatus") ? STATE["lastTelegramStatus"] : "N/A"
+    ; --- آخر حالة تيليجرام (تم إخفاؤها من العرض حسب طلبك) ---
+    ; lastTG := STATE.Has("lastTelegramStatus") ? STATE["lastTelegramStatus"] : "N/A"
 
     ; --- الطوابع الزمنية: آخر تشيك/ريفريش/ستاي أونلاين ---
     lastCheck := STATE.Has("lastStatusCheckTimestamp") ? STATE["lastStatusCheckTimestamp"] : "Never"
@@ -61,35 +60,34 @@ UpdateDashboard() {
     ; لو موسّع: لا نعرض مربعات البطارية، فقط النسبة
     batteryText := batteryPercentText
     if (isExpanded && battery >= 0) {
-        ; إزالة رسم المربعات "■ □"
+        ; إزالة رسم المربعات والرموز
         batteryText := batteryPercentText
     }
-    batteryBlocks := ""
-    filled := Floor(battery / 10)
-    Loop 10
-        batteryBlocks .= (A_Index <= filled) ? "■" : "□"
-    batteryText := "🔋 [" . batteryBlocks . "] " . batteryPercentText
+    ; إزالة بناء البلوكات تمامًا
+    ; batteryBlocks := ""
+    ; filled := Floor(battery / 10)
+    ; Loop 10
+    ;     batteryBlocks .= (A_Index <= filled) ? "■" : "□"
+    ; batteryText := "🔋 [" . batteryBlocks . "] " . batteryPercentText
 
     statusText := (STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "N/A")
     alarmText := alarmStatus
-    netShort := "Net N/A"
+    netShort := "Network N/A"
     if (STATE.Has("netOnline"))
-        netShort := STATE["netOnline"] ? "Net ✅" : "Net ❌"
+        netShort := STATE["netOnline"] ? "Network ✅" : "Network ❌"
 
     if !isExpanded {
-        ; نسخة مضغوطة: سطران فقط + تلميح للاختصار
-        tgShort := (StrLen(lastTG) > 32) ? (SubStr(lastTG, 1, 32) . "…") : lastTG
-        text := "S: " . statusText . " | " . netShort . " | 🔋 " . batteryPercentText . " | Idle " . idleText . "`n"
-        text .= "TG: " . tgShort . "   (Ctrl+Alt+D للتفاصيل)"
+        ; نسخة مضغوطة: سطران فقط + تلميح للاختصار (بدون عرض TG)
+        text := "S: " . statusText . " | " . netShort . " | Battery " . batteryPercentText . " | Idle " . idleText . "`n"
+         text .= "(Ctrl+Alt+D للتفاصيل)"
     } else {
-        ; نسخة موسّعة بكامل التفاصيل
+        ; نسخة موسّعة بكامل التفاصيل (بدون عرض Last TG)
         text := "Script: " . (STATE.Has("scriptStatus") ? STATE["scriptStatus"] : "N/A") . "`n"
         text .= "Status: " . statusText . " | Alarm: " . alarmText . "`n"
         text .= netLine . "`n"
         text .= "Battery: " . batteryText . " | User Idle: " . idleText . "`n"
         text .= "Last Check: " . lastCheck . " | Last Refresh: " . lastRefresh . "`n"
-        text .= "Last Stay Online: " . lastStay . "`n"
-        text .= "Last TG: " . lastTG
+        text .= "Last Stay Online: " . lastStay
     }
 
     ; كاش لتقليل الفليكر
@@ -100,7 +98,8 @@ UpdateDashboard() {
 
     tooltipId := 20
     tooltipX := 10, tooltipY := 40
-    ; منع التهنيج: عند الوقوف نخفي التولتيب ونؤجل إعادة عرضه 1.5 ثانية
+
+    ; تحسين الإخفاء: عند وقوف الماوس داخل منطقة التولتيب، أخفِ وتعطيل العرض 1.5 ثانية لمنع الوميض/التهنيج
     static hideUntilTick := 0
 
     lines := StrSplit(text, "`n")
@@ -147,11 +146,11 @@ UpdateDashboard() {
 
     if (STATE.Has("isAlarmPlaying") && STATE["isAlarmPlaying"]) {
         STATE["isAlarmPlaying"] := false
-        SetTimer(Func("AlarmBeep"), 0)
+        SetTimer(AlarmBeep, 0)
         STATE["offlineFixAttempts"] := 0
         STATE["isMonitoringPaused"] := true
         Info("Alarm stopped by CapsLock. Monitoring paused for " . (SETTINGS["ManualPauseDuration"]/1000) . " seconds.")
-        SetTimer(Func("ResumeMonitoring"), -SETTINGS["ManualPauseDuration"])
+        SetTimer(ResumeMonitoring, -SETTINGS["ManualPauseDuration"])
     }
     STATE["lastUserActivity"] := A_TickCount
 }

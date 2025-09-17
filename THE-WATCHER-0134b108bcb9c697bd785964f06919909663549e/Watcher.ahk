@@ -1,4 +1,4 @@
-﻿; ============================================================
+; ============================================================
 ; Watcher.ahk - Robust Guardian (AHK v2) - Final (fixed loop)
 ; Captures errors by reading last_error.log and exec.StdOut/StdErr
 ; ============================================================
@@ -6,8 +6,9 @@
 #SingleInstance Force
 
 ; -------------- Config --------------
-global BOT_TOKEN := "8328100113:AAEEtm8w7Em7eqSVSjq8yiG5nPu7JNBz9Nk"
-global CHAT_ID   := "5670001305"
+; قراءة الإعدادات العامة ومن ضمنها BOT_TOKEN/CHAT_ID عبر ملف الكور
+#Include "lib\01_CoreSettings.ahk"
+
 global SCRIPT_TO_RUN := A_ScriptDir "\master.ahk"
 global SCRIPT_NAME   := "MasterDashboard"
 global ERROR_LOG     := A_ScriptDir "\last_error.log"
@@ -101,6 +102,16 @@ ReportCatastrophicFailure(errorCode, errorText := "") {
 
     ErrorMessage := header . fileLineText . "`n`n📜 Error Output:`n" . errDisplay . "`n`n" .
                     "Time: " . FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss")
+
+    ; إذا لم تكن مفاتيح تيليجرام مضبوطة، احفظ محليًا وتخطى الإرسال
+    if (!BOT_TOKEN || !CHAT_ID) {
+        try {
+            FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") . " - Telegram disabled (missing keys). Saved locally." . "`n", A_ScriptDir "\watcher_send_error.log", "UTF-8")
+            FileAppend(ErrorMessage . "`n`n", A_ScriptDir "\watcher_send_error.log", "UTF-8")
+        } catch {
+        }
+        return
+    }
 
     ; Send with POST
     TelegramURL := "https://api.telegram.org/bot" . BOT_TOKEN . "/sendMessage"

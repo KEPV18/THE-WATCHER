@@ -260,12 +260,19 @@ SendTelegramError(errorObject) {
     ErrorMessage .= "Time: " . FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") . "`n"
     ErrorMessage .= bt . bt . bt
 
+    ; Guard: skip Telegram send if credentials missing
+    if (!BOT_TOKEN || !CHAT_ID) {
+        Warn("SendTelegramError skipped: missing BOT_TOKEN/CHAT_ID")
+        return
+    }
+
     TelegramURL := "https://api.telegram.org/bot" . BOT_TOKEN . "/sendMessage"
     postBody := "chat_id=" . CHAT_ID . "&text=" . UriEncode(ErrorMessage) . "&parse_mode=Markdown"
 
     try {
         Req := ComObject("WinHttp.WinHttpRequest.5.1")
         Req.Open("POST", TelegramURL, false)
+        Req.SetTimeouts(2000, 2000, 2000, 2000)
         Req.SetRequestHeader("Content-Type", "application/x-www-form-urlencoded")
         Req.Send(postBody)
     } catch {
@@ -302,6 +309,12 @@ SendRichTelegramNotification(title, detailsMap) {
         }
     } catch {
         ; Do nothing
+    }
+
+    ; Guard: skip Telegram send if credentials missing
+    if (!BOT_TOKEN || !CHAT_ID) {
+        Warn("SendRichTelegramNotification skipped: missing BOT_TOKEN/CHAT_ID")
+        return false
     }
 
     TelegramURL := "https://api.telegram.org/bot" . BOT_TOKEN . "/sendMessage"
@@ -376,6 +389,14 @@ SendTelegramPhoto(photoPath, caption) {
         ; تجاهل
     }
 
+    ; Guard: skip Telegram send if credentials missing
+    ; Guard: skip Telegram send if credentials missing
+    if (!BOT_TOKEN || !CHAT_ID) {
+        Warn("SendTelegramPhoto skipped: missing BOT_TOKEN/CHAT_ID")
+        if IsObject(STATE)
+            STATE["lastTelegramStatus"] := FormatTime(A_Now, "HH:mm:ss") . " - Photo Skipped (NO CREDS)"
+        return false
+    }
     if !FileExist(photoPath) {
         try {
             Warn("SendTelegramPhoto: File not found -> " . photoPath)
@@ -412,8 +433,10 @@ SendTelegramPhoto(photoPath, caption) {
         return
     }
 
+    ; اقرأ محتوى الملف إلى Buffer بدلاً من استخدام مؤشر غير مهيأ
     try {
-        file.RawRead(&fileContents, file.Size)
+        buf := Buffer(file.Size)
+        file.RawRead(buf, file.Size)
         file.Close()
     } catch {
         try {
@@ -424,17 +447,23 @@ SendTelegramPhoto(photoPath, caption) {
         return
     }
 
-    pAnsi := StrPut(payload, "CP0")
-    ansiLen := StrLen(pAnsi)
-    finalPayload := Buffer(ansiLen + file.Size + StrLen("--" . boundary . "--`r`n"))
+    ; احسب الأطوال بالبايت (CP0) بدون تضمين محرف النهاية null
+    bytesPrefix := StrPut(payload, 0, "CP0") - 1
+    trailer := "`r`n--" . boundary . "--`r`n"
+    bytesTrailer := StrPut(trailer, 0, "CP0") - 1
+    finalPayload := Buffer(bytesPrefix + buf.Size + bytesTrailer)
+
+    ; اكتب المقدمة الثنائية، ثم الصورة، ثم الذيل
     StrPut(payload, finalPayload, "CP0")
-    DllCall("RtlMoveMemory", "Ptr", finalPayload.Ptr + ansiLen, "Ptr", &fileContents, "Ptr", file.Size)
-    StrPut("`r`n--" . boundary . "--`r`n", finalPayload.Ptr + ansiLen + file.Size, "CP0")
+    DllCall("RtlMoveMemory", "Ptr", finalPayload.Ptr + bytesPrefix, "Ptr", buf.Ptr, "Ptr", buf.Size)
+    StrPut(trailer, finalPayload.Ptr + bytesPrefix + buf.Size, "CP0")
 
     try {
         whr := ComObject("WinHttp.WinHttpRequest.5.1")
         whr.Open("POST", "https://api.telegram.org/bot" . BOT_TOKEN . "/sendPhoto", false)
         whr.SetRequestHeader("Content-Type", "multipart/form-data; boundary=" . boundary)
+        ; مهلات صريحة لتفادي التعليق الطويل
+        whr.SetTimeouts(2000, 2000, 2000, 2000)
         whr.Send(finalPayload)
 
         if (whr.Status = 200) {
@@ -461,15 +490,10 @@ SendTelegramPhoto(photoPath, caption) {
             } catch {
                 ; Do nothing
             }
-            try {
-                FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") . " - Telegram Photo failed status " . whr.Status . " | Response: " . SubStr(whr.ResponseText,1,1000) . "`n`n", A_ScriptDir "\watcher_send_error.log", "UTF-8")
-            } catch {
-                ; Do nothing
-            }
         }
     } catch {
         try {
-            LogError("Telegram Photo CRITICAL FAIL: " . caption . " (no details).")
+            Warn("Telegram Photo CRITICAL FAIL: " . caption)
         } catch {
             ; Do nothing
         }
@@ -481,7 +505,6 @@ SendTelegramPhoto(photoPath, caption) {
         }
     }
 }
-
 ; ---------------- Simple wrapper ----------------
 SendTelegramNotification(EventName) {
     SendRichTelegramNotification(EventName, Map())

@@ -250,6 +250,17 @@ SendTelegramError(errorObject) {
     ErrorMessage .= "Source: " . (src != "" ? src : "N/A") . "`n"
     ErrorMessage .= bt . bt . bt
 
+    ; إذا لم تكن مفاتيح تيليجرام مضبوطة، احفظ محليًا وتخطى الإرسال
+    if (!BOT_TOKEN || !CHAT_ID) {
+        try {
+            FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") . " - SendTelegramError skipped: missing BOT_TOKEN/CHAT_ID." . "`n", A_ScriptDir "\watcher_send_error.log", "UTF-8")
+            FileAppend(ErrorMessage . "`n`n", A_ScriptDir "\watcher_send_error.log", "UTF-8")
+            if (IsObject(STATE))
+                STATE["lastTelegramStatus"] := FormatTime(A_Now, "HH:mm:ss") . " - SKIPPED: Error Report (missing keys)"
+        } catch {
+        }
+        return false
+    }
     ErrorMessage .= "Error: " . (errMsg ? errMsg : "[no message]") . "`n"
     if (file)
         ErrorMessage .= "File: " . file . "`n"
@@ -266,6 +277,7 @@ SendTelegramError(errorObject) {
     try {
         Req := ComObject("WinHttp.WinHttpRequest.5.1")
         Req.Open("POST", TelegramURL, false)
+        Req.SetTimeouts(2000, 2000, 2000, 2000)
         Req.SetRequestHeader("Content-Type", "application/x-www-form-urlencoded")
         Req.Send(postBody)
     } catch {
@@ -290,6 +302,17 @@ SendRichTelegramNotification(title, detailsMap) {
         }
     } catch {
         ; تجاهل
+    }
+
+    ; تحقق من المفاتيح قبل الإرسال
+    if (!BOT_TOKEN || !CHAT_ID) {
+        try {
+            FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") . " - SendRichTelegramNotification skipped: missing BOT_TOKEN/CHAT_ID." . "`n", A_ScriptDir "\watcher_send_error.log", "UTF-8")
+            if (IsObject(STATE))
+                STATE["lastTelegramStatus"] := FormatTime(A_Now, "HH:mm:ss") . " - SKIPPED: " . title . " (missing keys)"
+        } catch {
+        }
+        return false
     }
 
     MessageText := "*" . title . "*`n"
@@ -338,27 +361,23 @@ SendRichTelegramNotification(title, detailsMap) {
             } catch {
                 ; Do nothing
             }
-            sendStatus := FormatTime(A_Now, "HH:mm:ss") . " - " . title . " (FAIL: " . statusCode . ")"
-            try {
-                FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") . " - Telegram returned status " . statusCode . " for " . title . "`nResponse: " . SubStr(respText, 1, 1000) . "`n`n", A_ScriptDir "\watcher_send_error.log", "UTF-8")
-            } catch {
-            }
+            sendStatus := FormatTime(A_Now, "HH:mm:ss") . " - " . title . " (Failed: " . statusCode . ")"
         }
     } catch {
         try {
-            LogError("Telegram Rich Message CRITICAL FAIL: " . title . " (no details).")
+            Warn("Telegram Rich Message FAILED (exception): " . title)
         } catch {
-            ; Do nothing
         }
-        sendStatus := FormatTime(A_Now, "HH:mm:ss") . " - " . title . " (CRITICAL FAIL)"
+        sendStatus := FormatTime(A_Now, "HH:mm:ss") . " - " . title . " (Exception)"
     }
 
     try {
-        if IsObject(STATE)
+        if (IsObject(STATE))
             STATE["lastTelegramStatus"] := sendStatus
     } catch {
-        ; Do nothing
     }
+
+    return (InStr(sendStatus, "Success") > 0)
 }
 
 ; ---------------- Send Telegram Photo (multipart) ----------------
@@ -375,6 +394,18 @@ SendTelegramPhoto(photoPath, caption) {
     } catch {
         ; تجاهل
     }
+
+    ; Guard: skip Telegram send if credentials missing
+    try {
+        if (!BOT_TOKEN || !CHAT_ID) {
+            try Warn("SendTelegramPhoto skipped: missing BOT_TOKEN/CHAT_ID")
+            catch {}
+            try if IsObject(STATE)
+                STATE["lastTelegramStatus"] := FormatTime(A_Now, "HH:mm:ss") . " - Photo Skipped (NO CREDS)"
+            catch {}
+            return false
+        }
+    } catch {}
 
     if !FileExist(photoPath) {
         try {
@@ -412,8 +443,10 @@ SendTelegramPhoto(photoPath, caption) {
         return
     }
 
+    ; اقرأ محتوى الملف إلى Buffer بدلاً من استخدام مؤشر غير مهيأ
     try {
-        file.RawRead(&fileContents, file.Size)
+        buf := Buffer(file.Size)
+        file.RawRead(buf, file.Size)
         file.Close()
     } catch {
         try {
@@ -424,17 +457,23 @@ SendTelegramPhoto(photoPath, caption) {
         return
     }
 
-    pAnsi := StrPut(payload, "CP0")
-    ansiLen := StrLen(pAnsi)
-    finalPayload := Buffer(ansiLen + file.Size + StrLen("--" . boundary . "--`r`n"))
+    ; احسب الأطوال بالبايت (CP0) بدون تضمين محرف النهاية null
+    bytesPrefix := StrPut(payload, 0, "CP0") - 1
+    trailer := "`r`n--" . boundary . "--`r`n"
+    bytesTrailer := StrPut(trailer, 0, "CP0") - 1
+    finalPayload := Buffer(bytesPrefix + buf.Size + bytesTrailer)
+
+    ; اكتب المقدمة الثنائية، ثم الصورة، ثم الذيل
     StrPut(payload, finalPayload, "CP0")
-    DllCall("RtlMoveMemory", "Ptr", finalPayload.Ptr + ansiLen, "Ptr", &fileContents, "Ptr", file.Size)
-    StrPut("`r`n--" . boundary . "--`r`n", finalPayload.Ptr + ansiLen + file.Size, "CP0")
+    DllCall("RtlMoveMemory", "Ptr", finalPayload.Ptr + bytesPrefix, "Ptr", buf.Ptr, "Ptr", buf.Size)
+    StrPut(trailer, finalPayload.Ptr + bytesPrefix + buf.Size, "CP0")
 
     try {
         whr := ComObject("WinHttp.WinHttpRequest.5.1")
         whr.Open("POST", "https://api.telegram.org/bot" . BOT_TOKEN . "/sendPhoto", false)
         whr.SetRequestHeader("Content-Type", "multipart/form-data; boundary=" . boundary)
+        ; مهلات صريحة لتفادي التعليق الطويل
+        whr.SetTimeouts(2000, 2000, 2000, 2000)
         whr.Send(finalPayload)
 
         if (whr.Status = 200) {
@@ -461,15 +500,10 @@ SendTelegramPhoto(photoPath, caption) {
             } catch {
                 ; Do nothing
             }
-            try {
-                FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") . " - Telegram Photo failed status " . whr.Status . " | Response: " . SubStr(whr.ResponseText,1,1000) . "`n`n", A_ScriptDir "\watcher_send_error.log", "UTF-8")
-            } catch {
-                ; Do nothing
-            }
         }
     } catch {
         try {
-            LogError("Telegram Photo CRITICAL FAIL: " . caption . " (no details).")
+            Warn("Telegram Photo CRITICAL FAIL: " . caption)
         } catch {
             ; Do nothing
         }

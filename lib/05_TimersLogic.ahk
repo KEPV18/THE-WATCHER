@@ -84,12 +84,33 @@ StatusCheckTimer(*) {
             Info("Still OFFLINE. Attempting fix, attempt #" . STATE["offlineFixAttempts"])
             EnsureOnlineStatus()
             if (STATE["offlineFixAttempts"] >= 3 && !STATE["isAlarmPlaying"]) {
-                ; Start alarm for persistent offline status
+                Info("CRITICAL: Offline fix failed 3 times. Triggering alarm.")
                 STATE["isAlarmPlaying"] := true
-                SetTimer(() => SoundBeep(800, 500), 2000)
-                SendRichTelegramNotification("🚨 CRITICAL: Still Offline After 3 Attempts!", Map("Status", "ALARM ACTIVATED"))
+                ShowLocalNotification("🚨 ALARM: Offline fix FAILED!")
+                SendRichTelegramNotification("🚨 ALARM: Offline Fix Failed", Map("Attempts", STATE["offlineFixAttempts"], "Action", "Manual intervention required!"))
+                SetTimer(AlarmBeep, 300)
             }
         }
+        knownStatusFound := true
+    }
+    if (knownStatusFound) {
+        return
+    }
+
+    if (STATE["onlineStatus"] != "Unknown") {
+        Info("Online status is now definitively UNKNOWN.")
+        UpdateStatusDurations("Unknown") ; تجميع مدة الحالة السابقة وتحديث الحالية
+        STATE["onlineStatus"] := "Unknown"
+        STATE["offlineFixAttempts"] := 0
+    }
+    Info("Attempting to save and send a screenshot for the 'Unknown' state...")
+    screenshotResult := SaveStatusScreenshotEnhanced("unknown_status")
+    if (IsObject(screenshotResult) && screenshotResult.ok) {
+        Info("Successfully saved screenshot: " . screenshotResult.file)
+        caption := "🤔 Unknown Status Detected`nI couldn't recognize the status. Here is what I see in the status area."
+        SendTelegramPhoto(screenshotResult.file, caption)
+    } else {
+        Warn("Failed to save screenshot for unknown status. Check coordinates and permissions.")
     }
 }
 
@@ -109,15 +130,34 @@ StayOnlineTimer(*) {
     global SETTINGS, STATE
     if (!WinExist(SETTINGS["FrontlineWinTitle"]) || (A_TickCount - STATE["lastUserActivity"] < SETTINGS["UserIdleThreshold"]))
         return
-    ClickStayOnlineButton()
-    STATE["lastStayOnlineClickTime"] := A_TickCount
-    STATE["lastStayOnlineTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
+    res := ClickStayOnlineButton()
+    if (res) {
+        STATE["lastStayOnlineClickTime"] := A_TickCount
+        STATE["lastStayOnlineTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
+        Info("Stay Online click performed - timestamp updated.")
+        ; تهدئة قصيرة لتفادي التداخل مع الريفريش
+        STATE["actionBusyUntil"] := A_TickCount + 3000
+    } else {
+        Info("Stay Online: no button detected, no click performed.")
+    }
 }
 
 RefreshTimer(*) {
     global SETTINGS, STATE
     if (!WinExist(SETTINGS["FrontlineWinTitle"]))
         return
+    ; تخطي الريفريش أثناء التهدئة بعد إجراء (مثل Stay Online)
+    if (STATE.Has("actionBusyUntil") && A_TickCount < STATE["actionBusyUntil"]) {
+        Info("Refresh skipped (cooldown after action).")
+        return
+    }
+    ; لو نافذة Stay Online ظاهرة، اسكب الريفريش لتفادي الخناقة
+    stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
+    local sX, sY
+    if (ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)) {
+        Info("Refresh skipped: Stay Online window visible.")
+        return
+    }
     Click(SETTINGS["RefreshX"], SETTINGS["RefreshY"])
     Info("Refresh performed - Time-based")
     STATE["lastRefreshTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
@@ -143,7 +183,7 @@ MonitorTargetTimer(*) {
     targetArea := Map("x1", SETTINGS["TargetAreaTopLeftX"], "y1", SETTINGS["TargetAreaTopLeftY"], "x2", SETTINGS["TargetAreaBottomRightX"], "y2", SETTINGS["TargetAreaBottomRightY"])
     local foundX, foundY
     if (!ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], targetArea)) {
-        ; تأكيد الغياب 3 مرات خلال 3 ثوانٍ
+        ; تأكد من الغياب 3 مرات خلال 3 ثواني (مرة كل ثانية)
         confirmedMissing := true
         Loop 3 {
             Sleep(1000)
@@ -154,6 +194,7 @@ MonitorTargetTimer(*) {
             }
         }
         if (!confirmedMissing) {
+            ; لا إنذار
             return
         }
 
@@ -169,7 +210,7 @@ MonitorTargetTimer(*) {
             return
         }
 
-        ; --- منطق زر Stay Online ---
+        ; --- منطق التحقق من زر Stay Online قبل الإنذار ---
         stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
         local sX, sY
         stayVisible := ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)
@@ -195,7 +236,7 @@ MonitorTargetTimer(*) {
                     break
                 }
             }
-            ; احفظ لقطة للمنطقة في مجلد target word قبل الإنذار
+            ; احفظ لقطة للمنطقة الحالية في مجلد target word قبل الإشعار
             try SaveTargetWordScreenshot("target_missing")
 
             cause := "Unknown"
@@ -219,7 +260,7 @@ MonitorTargetTimer(*) {
             return
         }
 
-        ; لا يوجد Stay Online: احفظ لقطة ثم أنذر
+        ; لو مفيش Stay Online: احفظ لقطة ثم أنذر
         try SaveTargetWordScreenshot("target_missing")
         if !STATE["isAlarmPlaying"] {
             STATE["isAlarmPlaying"] := true
@@ -232,25 +273,18 @@ MonitorTargetTimer(*) {
             )
             SendRichTelegramNotification("🚨 ALARM: Target Word Missing!", details)
             SetTimer(AlarmBeep, 300)
-        } else {
-            if (STATE["isAlarmPlaying"]) {
-                STATE["isAlarmPlaying"] := false
-                SetTimer(Func("AlarmBeep"), 0)
-                STATE["lastUserActivity"] := A_TickCount + SETTINGS["WordMonitorUserIdleReset"]
-                Info("Alarm stopped - Target word found.")
-            }
+        }
+    } else {
+        if (STATE["isAlarmPlaying"]) {
+            STATE["isAlarmPlaying"] := false
+            SetTimer(AlarmBeep, 0)
+            STATE["lastUserActivity"] := A_TickCount + SETTINGS["WordMonitorUserIdleReset"]
+            Info("Alarm stopped - Target word found.")
         }
     }
 }
 
-AlarmBeep(*) {
-    global SETTINGS, STATE
-    if !STATE.Has("isAlarmPlaying") || !STATE["isAlarmPlaying"] {
-        SetTimer(Func("AlarmBeep"), 0)
-        return
-    }
-    SoundBeep(SETTINGS["BeepFrequency"], SETTINGS["BeepDuration"])
-}
+; Removed duplicate AlarmBeep - consolidated implementation exists later in file
 
 ClickStayOnlineButton() {
     global SETTINGS, STATE
@@ -258,12 +292,12 @@ ClickStayOnlineButton() {
     
     ; منع التداخل في عمليات النقر
     if (clickingBusy)
-        return
+        return false
     clickingBusy := true
 
     try {
         if (!WinExist(SETTINGS["FrontlineWinTitle"]))
-            return
+            return false
 
         ; توحيد نظام الإحداثيات
         CoordMode "Mouse", "Screen"
@@ -298,7 +332,7 @@ ClickStayOnlineButton() {
                 Sleep 1000
                 if (!ReliableImageSearch(&foundX, &foundY, SETTINGS["StayOnlineImage"], stayOnlineArea)) {
                     Info("Stay Online button successfully clicked and disappeared.")
-                    return
+                    return true
                 }
                 Sleep 500
             }
@@ -315,6 +349,7 @@ ClickStayOnlineButton() {
     } finally {
         clickingBusy := false
     }
+    return false
 }
 
 ; --- Helpers for status duration tracking and daily report ---
@@ -408,8 +443,8 @@ DailyReportTimer(*) {
 
 ; --- Internet Check Timer ---
 NetCheckTimer(*) {
-    global STATE
-    online := HttpCheckInternet(2500)
+    global STATE, SETTINGS
+    online := HttpCheckInternet(SETTINGS.Has("NetCheckTimeoutMs") ? SETTINGS["NetCheckTimeoutMs"] : 800)
     if (online) {
         if (!STATE["netOnline"]) {
             STATE["netOnline"] := true
@@ -426,6 +461,12 @@ NetCheckTimer(*) {
                 ))
             }
             FlushTelegramQueue()
+            ; لو كان إنذار الشبكة شغال، أوقفه الآن (وأبقِ أي إنذار آخر كما هو)
+            if (STATE.Has("isNetAlarmPlaying") && STATE["isNetAlarmPlaying"]) {
+                STATE["isNetAlarmPlaying"] := false
+                if !(STATE.Has("isAlarmPlaying") && STATE["isAlarmPlaying"])
+                    SetTimer(AlarmBeep, 0)
+            }
         }
     } else {
         if (STATE["netOnline"]) {
@@ -439,6 +480,11 @@ NetCheckTimer(*) {
                 "details", Map("Time", FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss"))
             ))
             STATE["lastTelegramStatus"] := FormatTime(A_Now, "HH:mm:ss") . " - QUEUED: Internet Disconnected"
+            ; شغِّل إنذار الشبكة فورًا حتى لو الانقطاع ثانية واحدة
+            STATE["isNetAlarmPlaying"] := true
+            if !(STATE.Has("isAlarmPlaying") && STATE["isAlarmPlaying"]) {
+                SetTimer(AlarmBeep, 300)
+            }
         }
     }
 }
@@ -466,4 +512,15 @@ BatteryCheckTimer(*) {
             SendRichTelegramNotification("⚠ Low Battery", Map("Battery", pct . "%", "Time", FormatTime(A_Now, "HH:mm:ss")))
         }
     }
+}
+
+AlarmBeep(*) {
+    global SETTINGS, STATE
+    ; استمر بالتصفير إذا كان هناك أي نوع من الإنذارات: عام أو شبكة
+    activeAlarm := (STATE.Has("isAlarmPlaying") && STATE["isAlarmPlaying"]) || (STATE.Has("isNetAlarmPlaying") && STATE["isNetAlarmPlaying"])
+    if (!activeAlarm) {
+        SetTimer(AlarmBeep, 0)
+        return
+    }
+    SoundBeep(SETTINGS["BeepFrequency"], SETTINGS["BeepDuration"])
 }
