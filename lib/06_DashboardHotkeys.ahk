@@ -82,7 +82,7 @@ UpdateDashboard() {
          text .= "(Ctrl+Alt+D للتفاصيل)"
     } else {
         ; نسخة موسّعة بكامل التفاصيل (بدون عرض Last TG)
-        text := "Script: " . (STATE.Has("scriptStatus") ? STATE["scriptStatus"] : "N/A") . "`n"
+        text := "The Watcher by A.k`n"
         text .= "Status: " . statusText . " | Alarm: " . alarmText . "`n"
         text .= netLine . "`n"
         text .= "Battery: " . batteryText . " | User Idle: " . idleText . "`n"

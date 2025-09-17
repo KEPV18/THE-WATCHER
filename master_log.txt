@@ -139,3 +139,30 @@ Line: 82
 [20250917221053] [INFO] Front Line launched from shortcut.
 [20250917221153] [INFO] Front Line window not found. Attempting to restart app.
 [20250917221153] [INFO] Front Line launched from shortcut.
+[20250917221640] [INFO] STATE Map has been re-initialized.
+[20250917221640] [INFO] STATE Map has been re-initialized.
+[20250917221640] [WARN] Telegram is disabled: missing BOT_TOKEN/CHAT_ID. All Telegram sends will be skipped.
+[20250917221640] [INFO] --- Script Starting ---
+[20250917221640] [INFO] SelfTest: All required files/shortcuts found.
+[20250917221640] [INFO] Frontline not found on start. Attempting to launch.
+[20250917221640] [INFO] Front Line launched from shortcut.
+[20250917221655] [INFO] Timers initialized. Running.
+[20250917221655] [INFO] STATE Map has been re-initialized.
+[20250917221655] [INFO] Master script loaded and initialized successfully.
+[20250917221755] [INFO] Front Line window not found. Attempting to restart app.
+[20250917221755] [INFO] Front Line launched from shortcut.
+[20250917221855] [INFO] Front Line window not found. Attempting to restart app.
+[20250917221855] [INFO] Front Line launched from shortcut.
+[20250917221955] [INFO] Front Line window not found. Attempting to restart app.
+[20250917221955] [INFO] Front Line launched from shortcut.
+[20250917222011] [WARN] SendRichTelegramNotification skipped: missing BOT_TOKEN/CHAT_ID
+[20250917222011] [INFO] STATE Map has been re-initialized.
+[20250917222011] [INFO] STATE Map has been re-initialized.
+[20250917222011] [WARN] Telegram is disabled: missing BOT_TOKEN/CHAT_ID. All Telegram sends will be skipped.
+[20250917222011] [INFO] --- Script Starting ---
+[20250917222011] [INFO] SelfTest: All required files/shortcuts found.
+[20250917222011] [INFO] Frontline not found on start. Attempting to launch.
+[20250917222011] [INFO] Front Line launched from shortcut.
+[20250917222026] [INFO] Timers initialized. Running.
+[20250917222026] [INFO] STATE Map has been re-initialized.
+[20250917222026] [INFO] Master script loaded and initialized successfully.
