@@ -1,0 +1,10 @@
+﻿[20250917043015] [INFO] STATE Map has been re-initialized.
+[20250917043015] [INFO] STATE Map has been re-initialized.
+[20250917043015] [INFO] --- Script Starting ---
+[20250917043015] [INFO] SelfTest: All required files/shortcuts found.
+[20250917043015] [INFO] Frontline not found on start. Attempting to launch.
+[20250917043015] [INFO] Front Line launched from shortcut.
+[20250917043030] [ERROR] --- UNHANDLED SCRIPT CRASH ---
+Error: Invalid base.
+File: D:\downloads\safe\THE-WATCHER-main\lib\03_InitAndSettings.ahk
+Line: 44
