@@ -7,7 +7,7 @@ UpdateDashboardTimer(*) {
 }
 
 UpdateDashboard() {
-    global STATE
+    global STATE, SETTINGS
     if !IsObject(STATE) {
         Info("STATE object not ready for dashboard update.")
         return
@@ -97,7 +97,8 @@ UpdateDashboard() {
     prevText := text
 
     tooltipId := 20
-    tooltipX := 10, tooltipY := 40
+    tooltipX := (IsObject(SETTINGS) && SETTINGS.Has("DashboardX")) ? SETTINGS["DashboardX"] : 10
+    tooltipY := (IsObject(SETTINGS) && SETTINGS.Has("DashboardY")) ? SETTINGS["DashboardY"] : 120
 
     ; تحسين الإخفاء: عند وقوف الماوس داخل منطقة التولتيب، أخفِ وتعطيل العرض 1.5 ثانية لمنع الوميض/التهنيج
     static hideUntilTick := 0
@@ -117,11 +118,13 @@ UpdateDashboard() {
         return
     }
 
-    MouseGetPos &mx, &my
-    if (mx >= tooltipX && mx <= tooltipX + widthPx && my >= tooltipY && my <= tooltipY + heightPx) {
-        ToolTip(, , , tooltipId)
-        hideUntilTick := A_TickCount + 1500
-        return
+    if (IsObject(SETTINGS) && SETTINGS.Has("DashboardHideOnHover") && SETTINGS["DashboardHideOnHover"]) {
+        MouseGetPos &mx, &my
+        if (mx >= tooltipX && mx <= tooltipX + widthPx && my >= tooltipY && my <= tooltipY + heightPx) {
+            ToolTip(, , , tooltipId)
+            hideUntilTick := A_TickCount + 1500
+            return
+        }
     }
 
     ToolTip(text, tooltipX, tooltipY, tooltipId)

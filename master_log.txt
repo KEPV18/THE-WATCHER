@@ -166,3 +166,22 @@ Line: 82
 [20250917222026] [INFO] Timers initialized. Running.
 [20250917222026] [INFO] STATE Map has been re-initialized.
 [20250917222026] [INFO] Master script loaded and initialized successfully.
+[20250917222126] [INFO] Front Line window not found. Attempting to restart app.
+[20250917222126] [INFO] Front Line launched from shortcut.
+[20250917222226] [INFO] Front Line window not found. Attempting to restart app.
+[20250917222226] [INFO] Front Line launched from shortcut.
+[20250917222326] [INFO] Front Line window not found. Attempting to restart app.
+[20250917222326] [INFO] Front Line launched from shortcut.
+[20250917222426] [INFO] Front Line window not found. Attempting to restart app.
+[20250917222426] [INFO] Front Line launched from shortcut.
+[20250917222517] [WARN] SendRichTelegramNotification skipped: missing BOT_TOKEN/CHAT_ID
+[20250918014621] [INFO] STATE Map has been re-initialized.
+[20250918014621] [INFO] STATE Map has been re-initialized.
+[20250918014621] [INFO] Telegram is enabled: BOT_TOKEN/CHAT_ID loaded.
+[20250918014621] [INFO] --- Script Starting ---
+[20250918014621] [INFO] SelfTest: All required files/shortcuts found.
+[20250918014621] [INFO] Frontline not found on start. Attempting to launch.
+[20250918014621] [INFO] Front Line launched from shortcut.
+[20250918014636] [INFO] Timers initialized. Running.
+[20250918014636] [INFO] STATE Map has been re-initialized.
+[20250918014636] [INFO] Master script loaded and initialized successfully.

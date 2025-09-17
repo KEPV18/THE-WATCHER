@@ -2,6 +2,9 @@
 ; 05_TimersLogic.ahk (v3 - Using Rich Notifications & Photos)
 ; ============================================================
 
+; ============================================================
+; StatusCheckTimer - updated to detect Coaching and use image lists
+; ============================================================
 StatusCheckTimer(*) {
     global SETTINGS, STATE
     if !IsObject(STATE) {
@@ -39,12 +42,39 @@ StatusCheckTimer(*) {
         if (knownStatusFound)
             return
     } else {
-        ; رجوع للخيار القديم لو القائمة غير متاحة
         if (ReliableImageSearch(&foundX, &foundY, SETTINGS["OnlineImage"], statusArea)) {
             if (STATE["onlineStatus"] != "Online") {
                 Info("Status changed to: Online")
                 UpdateStatusDurations("Online")
                 STATE["onlineStatus"] := "Online"
+                STATE["offlineFixAttempts"] := 0
+            }
+            return
+        }
+    }
+
+    ; ثانياً: اكتشاف حالة Coaching (لا نقوم بأي إجراء، فقط تحديث الحالة)
+    if (SETTINGS.Has("CoachingImageList") && SETTINGS["CoachingImageList"].Length > 0) {
+        for cimg in SETTINGS["CoachingImageList"] {
+            if (ReliableImageSearch(&foundX, &foundY, cimg, statusArea)) {
+                if (STATE["onlineStatus"] != "Coaching") {
+                    Info("Status changed to: Coaching")
+                    UpdateStatusDurations("Coaching")
+                    STATE["onlineStatus"] := "Coaching"
+                    STATE["offlineFixAttempts"] := 0
+                }
+                knownStatusFound := true
+                break
+            }
+        }
+        if (knownStatusFound)
+            return
+    } else if (SETTINGS.Has("CoachingImage") && FileExist(SETTINGS["CoachingImage"])) {
+        if (ReliableImageSearch(&foundX, &foundY, SETTINGS["CoachingImage"], statusArea)) {
+            if (STATE["onlineStatus"] != "Coaching") {
+                Info("Status changed to: Coaching")
+                UpdateStatusDurations("Coaching")
+                STATE["onlineStatus"] := "Coaching"
                 STATE["offlineFixAttempts"] := 0
             }
             return
@@ -73,7 +103,7 @@ StatusCheckTimer(*) {
     if (ReliableImageSearch(&foundX, &foundY, SETTINGS["OfflineImage"], statusArea)) {
         if (STATE["onlineStatus"] != "Offline") {
             Info("OFFLINE status detected.")
-            UpdateStatusDurations("Offline") ; تجميع مدة الحالة السابقة وتحديث الحالية
+            UpdateStatusDurations("Offline")
             STATE["onlineStatus"] := "Offline"
             STATE["offlineFixAttempts"] := 1
             ShowLocalNotification("❗ Status is OFFLINE! Attempting fix...")
@@ -99,7 +129,7 @@ StatusCheckTimer(*) {
 
     if (STATE["onlineStatus"] != "Unknown") {
         Info("Online status is now definitively UNKNOWN.")
-        UpdateStatusDurations("Unknown") ; تجميع مدة الحالة السابقة وتحديث الحالية
+        UpdateStatusDurations("Unknown")
         STATE["onlineStatus"] := "Unknown"
         STATE["offlineFixAttempts"] := 0
     }
@@ -126,19 +156,62 @@ EnsureOnlineStatus() {
     Info("Fix clicks performed.")
 }
 
+; يحرك الماوس بعيدًا عن منطقة الداشبورد إذا كانت تختفي عند المرور عليها
+NudgeMouseAwayFromDashboard() {
+    global SETTINGS
+    try {
+        if (SETTINGS.Has("DashboardHideOnHover") && SETTINGS["DashboardHideOnHover"]) {
+            CoordMode "Mouse", "Screen"
+            MouseMove A_ScreenWidth - 5, A_ScreenHeight - 5, 0
+            Sleep 100
+        }
+    } catch {
+        ; تجاهل أي أخطاء غير متوقعة هنا
+    }
+}
+
+; ============================================================
+; Helper: ImageListSearch - search across multiple images
+; ============================================================
+ImageListSearch(&outX, &outY, images, area) {
+    try {
+        if (IsObject(images) && images.Length > 0) {
+            for img in images {
+                if (ReliableImageSearch(&outX, &outY, img, area))
+                    return true
+            }
+        }
+    } catch {
+    }
+    return false
+}
+
 StayOnlineTimer(*) {
     global SETTINGS, STATE
     if (!WinExist(SETTINGS["FrontlineWinTitle"]) || (A_TickCount - STATE["lastUserActivity"] < SETTINGS["UserIdleThreshold"]))
         return
+    current := STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "Unknown"
+    if (current != "Online")
+        return
+    NudgeMouseAwayFromDashboard()
     res := ClickStayOnlineButton()
     if (res) {
         STATE["lastStayOnlineClickTime"] := A_TickCount
         STATE["lastStayOnlineTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
         Info("Stay Online click performed - timestamp updated.")
-        ; تهدئة قصيرة لتفادي التداخل مع الريفريش
         STATE["actionBusyUntil"] := A_TickCount + 3000
     } else {
-        Info("Stay Online: no button detected, no click performed.")
+        ; لم يتم العثور على الزر — اضغط في مركز المنطقة كاحتياطي
+        stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
+        cx := (stayOnlineArea["x1"] + stayOnlineArea["x2"]) // 2
+        cy := (stayOnlineArea["y1"] + stayOnlineArea["y2"]) // 2
+        CoordMode "Mouse", "Screen"
+        MouseMove cx, cy, 0
+        Click
+        STATE["lastStayOnlineClickTime"] := A_TickCount
+        STATE["lastStayOnlineTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
+        STATE["actionBusyUntil"] := A_TickCount + 3000
+        Info("Stay Online: button not detected, performed fallback center click.")
     }
 }
 
@@ -146,19 +219,27 @@ RefreshTimer(*) {
     global SETTINGS, STATE
     if (!WinExist(SETTINGS["FrontlineWinTitle"]))
         return
-    ; تخطي الريفريش أثناء التهدئة بعد إجراء (مثل Stay Online)
+    current := STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "Unknown"
+    if (current != "Online") {
+        Info("Refresh skipped: status is " . current)
+        return
+    }
+    NudgeMouseAwayFromDashboard()
     if (STATE.Has("actionBusyUntil") && A_TickCount < STATE["actionBusyUntil"]) {
         Info("Refresh skipped (cooldown after action).")
         return
     }
-    ; لو نافذة Stay Online ظاهرة، اسكب الريفريش لتفادي الخناقة
     stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
     local sX, sY
-    if (ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)) {
+    stayVisible := (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0)
+        ? ImageListSearch(&sX, &sY, SETTINGS["StayOnlineImageList"], stayOnlineArea)
+        : ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)
+    if (stayVisible) {
         Info("Refresh skipped: Stay Online window visible.")
         return
     }
     Click(SETTINGS["RefreshX"], SETTINGS["RefreshY"])
+    NudgeMouseAwayFromDashboard()
     Info("Refresh performed - Time-based")
     STATE["lastRefreshTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
 }
@@ -166,35 +247,46 @@ RefreshTimer(*) {
 MonitorTargetTimer(*) {
     global SETTINGS, STATE
     static lastIdleCheck := 0
-    
-    ; تحقق من الخمول كل 10 ثواني فقط
     if (A_TickCount - lastIdleCheck < 10000)
         return
     lastIdleCheck := A_TickCount
-    
-    if (STATE["onlineStatus"] != "Online" || STATE["isMonitoringPaused"]) {
-        if (STATE["isAlarmPlaying"] && STATE["onlineStatus"] != "Online") {
+    NudgeMouseAwayFromDashboard()
+
+    allowed := SETTINGS.Has("TargetMonitorStatuses") ? SETTINGS["TargetMonitorStatuses"] : ["Online"]
+    current := STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "Unknown"
+    isAllowed := false
+    for st in allowed {
+        if (current = st) {
+            isAllowed := true
+            break
+        }
+    }
+    if (!isAllowed || STATE["isMonitoringPaused"]) {
+        if (STATE["isAlarmPlaying"]) {
             STATE["isAlarmPlaying"] := false
             SetTimer(AlarmBeep, 0)
-            Info("Alarm stopped because status is no longer 'Online'.")
+            Info("Alarm stopped because status is not in allowed monitor statuses.")
         }
         return
     }
+
     targetArea := Map("x1", SETTINGS["TargetAreaTopLeftX"], "y1", SETTINGS["TargetAreaTopLeftY"], "x2", SETTINGS["TargetAreaBottomRightX"], "y2", SETTINGS["TargetAreaBottomRightY"])
     local foundX, foundY
-    if (!ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], targetArea)) {
-        ; تأكد من الغياب 3 مرات خلال 3 ثواني (مرة كل ثانية)
+    hasTarget := (SETTINGS.Has("TargetImageList") && SETTINGS["TargetImageList"].Length > 0)
+        ? ImageListSearch(&foundX, &foundY, SETTINGS["TargetImageList"], targetArea)
+        : ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], targetArea)
+    if (!hasTarget) {
         confirmedMissing := true
         Loop 3 {
             Sleep(1000)
-            if (ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], targetArea)) {
+            if ((SETTINGS.Has("TargetImageList") && ImageListSearch(&foundX, &foundY, SETTINGS["TargetImageList"], targetArea))
+                || ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], targetArea)) {
                 confirmedMissing := false
                 Info("Target word re-appeared during triple-check. No alarm.")
                 break
             }
         }
         if (!confirmedMissing) {
-            ; لا إنذار
             return
         }
 
@@ -210,10 +302,11 @@ MonitorTargetTimer(*) {
             return
         }
 
-        ; --- منطق التحقق من زر Stay Online قبل الإنذار ---
         stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
         local sX, sY
-        stayVisible := ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)
+        stayVisible := (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0)
+            ? ImageListSearch(&sX, &sY, SETTINGS["StayOnlineImageList"], stayOnlineArea)
+            : ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)
         if (stayVisible) {
             Info("Target missing BUT Stay Online window is visible. Will attempt to dismiss it and re-check target.")
             ClickStayOnlineButton()
@@ -221,8 +314,11 @@ MonitorTargetTimer(*) {
             Loop 5 {
                 Sleep(1000)
                 attempts++
-                stillStay := ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)
-                targetBack := ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], targetArea)
+                stillStay := (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0)
+                    ? ImageListSearch(&sX, &sY, SETTINGS["StayOnlineImageList"], stayOnlineArea)
+                    : ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)
+                targetBack := (SETTINGS.Has("TargetImageList") && ImageListSearch(&foundX, &foundY, SETTINGS["TargetImageList"], targetArea))
+                    || ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], targetArea)
                 if (!stillStay && targetBack) {
                     Info("Target is back after dismissing Stay Online. No alarm.")
                     return
@@ -236,11 +332,11 @@ MonitorTargetTimer(*) {
                     break
                 }
             }
-            ; احفظ لقطة للمنطقة الحالية في مجلد target word قبل الإشعار
             try SaveTargetWordScreenshot("target_missing")
 
             cause := "Unknown"
-            if (ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea))
+            if ((SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0 && ImageListSearch(&sX, &sY, SETTINGS["StayOnlineImageList"], stayOnlineArea))
+                || ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea))
                 cause := "StayOnlineStillVisible"
             else
                 cause := "TargetStillMissingAfterDismiss"
@@ -260,7 +356,6 @@ MonitorTargetTimer(*) {
             return
         }
 
-        ; لو مفيش Stay Online: احفظ لقطة ثم أنذر
         try SaveTargetWordScreenshot("target_missing")
         if !STATE["isAlarmPlaying"] {
             STATE["isAlarmPlaying"] := true
@@ -289,8 +384,6 @@ MonitorTargetTimer(*) {
 ClickStayOnlineButton() {
     global SETTINGS, STATE
     static clickingBusy := false
-    
-    ; منع التداخل في عمليات النقر
     if (clickingBusy)
         return false
     clickingBusy := true
@@ -299,24 +392,22 @@ ClickStayOnlineButton() {
         if (!WinExist(SETTINGS["FrontlineWinTitle"]))
             return false
 
-        ; توحيد نظام الإحداثيات
+        NudgeMouseAwayFromDashboard()
         CoordMode "Mouse", "Screen"
-        
         stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], 
                              "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
         local foundX, foundY
 
-        if (ReliableImageSearch(&foundX, &foundY, SETTINGS["StayOnlineImage"], stayOnlineArea)) {
+        found := (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0)
+            ? ImageListSearch(&foundX, &foundY, SETTINGS["StayOnlineImageList"], stayOnlineArea)
+            : ReliableImageSearch(&foundX, &foundY, SETTINGS["StayOnlineImage"], stayOnlineArea)
+        if (found) {
             Info("Stay Online button found. Attempting to click.")
             ShowLocalNotification("❗ Stay Online window appeared!")
             QueueTelegram(Map("type", "text", "title", "❗ Stay Online Window Detected", 
                            "details", Map("Action", "Attempting to click the button automatically.")))
-
-            ; استخدام الصورة المخزنة مؤقتاً من ReliableImageSearch
             clickX := foundX + 10
             clickY := foundY + 10
-
-            ; محاولات النقر مع تأخير مناسب
             Loop 3 {
                 BlockInput true
                 try {
@@ -327,29 +418,25 @@ ClickStayOnlineButton() {
                 } finally {
                     BlockInput false
                 }
-
-                ; التحقق من اختفاء الزر
-                Sleep 1000
-                if (!ReliableImageSearch(&foundX, &foundY, SETTINGS["StayOnlineImage"], stayOnlineArea)) {
-                    Info("Stay Online button successfully clicked and disappeared.")
+                local sx, sy
+                still := (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0)
+                    ? ImageListSearch(&sx, &sy, SETTINGS["StayOnlineImageList"], stayOnlineArea)
+                    : ReliableImageSearch(&sx, &sy, SETTINGS["StayOnlineImage"], stayOnlineArea)
+                if (!still) {
+                    STATE["lastStayOnlineClickTime"] := A_TickCount
+                    STATE["lastStayOnlineTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
+                    Info("Stay Online button clicked successfully.")
                     return true
                 }
-                Sleep 500
             }
-
-            ; تنبيه في حالة الفشل
-            if !STATE["isAlarmPlaying"] {
-                STATE["isAlarmPlaying"] := true
-                ShowLocalNotification("🚨 ALARM: Stay Online button is STUCK!")
-                QueueTelegram(Map("type", "text", "title", "🚨 ALARM: Stay Online Button Stuck",
-                               "details", Map("Attempts", 3, "Action", "Manual intervention required!")))
-                SetTimer(AlarmBeep, 300)
-            }
+            Warn("Failed to dismiss Stay Online after multiple attempts.")
+            return false
+        } else {
+            return false
         }
     } finally {
         clickingBusy := false
     }
-    return false
 }
 
 ; --- Helpers for status duration tracking and daily report ---

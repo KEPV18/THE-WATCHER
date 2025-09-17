@@ -11,6 +11,7 @@ InitializeScript() {
     SETTINGS["StatusCheckInterval"] := 60000       ; Last Check كل دقيقة
     SETTINGS["RefreshInterval"] := 60000           ; Last Refresh كل دقيقة
     SETTINGS["UserIdleThreshold"] := 60000         ; User Idle Threshold دقيقة واحدة
+    SETTINGS["StayOnlineInterval"] := 120000       ; تحقق زر Stay Online كل دقيقتين
     ; لو حبيت نعدل غيرهم كمان بلغني (زي MainLoopInterval أو غيره)
 
     ; --- Set up the initial state of the script ---
@@ -102,6 +103,7 @@ InitializeState() {
     STATE["statusDurations"] := Map(  ; المدد بالمللي ثانية
         "Online", 0,
         "WorkOnMyTicket", 0,
+        "Coaching", 0,
         "Break", 0,
         "Launch", 0,
         "Offline", 0,
@@ -126,11 +128,16 @@ LoadSettings() {
         SETTINGS["FrontlineShortcutName"] := IniRead(iniFile, "Citrix", "ShortcutName", "Front Line")
         SETTINGS["OfflineImage"] := imageFolder . IniRead(iniFile, "Citrix", "OfflineImageName", "offline.png")
         SETTINGS["StayOnlineImage"] := imageFolder . IniRead(iniFile, "Citrix", "StayOnlineImageName", "stay_online.png")
+        ; دعم صورة ثانية لزر Stay Online
+        SETTINGS["StayOnlineImage2"] := imageFolder . IniRead(iniFile, "Citrix", "StayOnlineImageName2", "stay_online2.png")
         SETTINGS["OnlineImage"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName", "online.png")
         ; دعم صور أونلاين إضافية اختيارية (ستُعامل مثل Online العادية)
         SETTINGS["OnlineImage2"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName2", "online2.png")
         SETTINGS["OnlineImage3"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName3", "online3.png")
         SETTINGS["OnlineImage4"] := imageFolder . IniRead(iniFile, "Citrix", "OnlineImageName4", "online4.png")
+        ; دعم حالة Coaching بصورتين
+        SETTINGS["CoachingImage"] := imageFolder . IniRead(iniFile, "Citrix", "CoachingImageName", "coaching.png")
+        SETTINGS["CoachingImage2"] := imageFolder . IniRead(iniFile, "Citrix", "CoachingImageName2", "coaching2.png")
         ; ابنِ قائمة الصور المتاحة فعليًا
         SETTINGS["OnlineImageList"] := []
         try {
@@ -141,11 +148,31 @@ LoadSettings() {
                     SETTINGS["OnlineImageList"].Push(SETTINGS[k])
             }
         }
+        ; قوائم لزر Stay Online و Coaching (إن وُجدت الملفات)
+        SETTINGS["StayOnlineImageList"] := []
+        if (FileExist(SETTINGS["StayOnlineImage"]))
+            SETTINGS["StayOnlineImageList"].Push(SETTINGS["StayOnlineImage"])
+        if (SETTINGS.Has("StayOnlineImage2") && FileExist(SETTINGS["StayOnlineImage2"]))
+            SETTINGS["StayOnlineImageList"].Push(SETTINGS["StayOnlineImage2"]) 
+
+        SETTINGS["CoachingImageList"] := []
+        if (SETTINGS.Has("CoachingImage") && FileExist(SETTINGS["CoachingImage"]))
+            SETTINGS["CoachingImageList"].Push(SETTINGS["CoachingImage"])
+        if (SETTINGS.Has("CoachingImage2") && FileExist(SETTINGS["CoachingImage2"]))
+            SETTINGS["CoachingImageList"].Push(SETTINGS["CoachingImage2"])        
         ; التوقيتات (القيم الافتراضية كما هي، سنفرض دقيقة بعد التحميل في InitializeScript)
         SETTINGS["WorkOnMyTicketImage"] := imageFolder . IniRead(iniFile, "Citrix", "WorkOnMyTicketImageName", "work_on_my_ticket.png")
         SETTINGS["LaunchImage"] := imageFolder . IniRead(iniFile, "Citrix", "LaunchImageName", "launch.png")
         SETTINGS["BreakImage"] := imageFolder . IniRead(iniFile, "Citrix", "BreakImageName", "break.png")
         SETTINGS["TargetImage"] := imageFolder . IniRead(iniFile, "WordMonitor", "TargetImageName", "target_word.PNG")
+        ; دعم صورة ثانية لتارجت ورد
+        SETTINGS["TargetImage2"] := imageFolder . IniRead(iniFile, "WordMonitor", "TargetImageName2", "target_word2.PNG")
+        ; قائمة صور التارجت (واحدة أو اثنتان)
+        SETTINGS["TargetImageList"] := []
+        if (FileExist(SETTINGS["TargetImage"]))
+            SETTINGS["TargetImageList"].Push(SETTINGS["TargetImage"])
+        if (SETTINGS.Has("TargetImage2") && FileExist(SETTINGS["TargetImage2"]))
+            SETTINGS["TargetImageList"].Push(SETTINGS["TargetImage2"])        
         SETTINGS["BeepFrequency"] := IniRead(iniFile, "WordMonitor", "BeepFrequency", 800)
         SETTINGS["BeepDuration"] := IniRead(iniFile, "WordMonitor", "BeepDuration", 400)
         SETTINGS["StatusAreaTopLeftX"] := IniRead(iniFile, "Coordinates", "StatusAreaTopLeftX", 59)
@@ -180,9 +207,21 @@ LoadSettings() {
         ; --- إعدادات إضافية ---
         SETTINGS["NetCheckInterval"] := IniRead(iniFile, "Timings", "NetCheckInterval", 1000)
         SETTINGS["NetCheckTimeoutMs"] := IniRead(iniFile, "Network", "CheckTimeoutMs", 800)
-         SETTINGS["StateSaveInterval"] := IniRead(iniFile, "Persistence", "StateSaveInterval", 300000)
-         SETTINGS["BatteryAlertThreshold"] := IniRead(iniFile, "Battery", "AlertThreshold", 20)
-         SETTINGS["BatteryAlertCooldown"] := IniRead(iniFile, "Battery", "AlertCooldownMs", 1800000) ; 30 دقيقة
+        SETTINGS["StateSaveInterval"] := IniRead(iniFile, "Persistence", "StateSaveInterval", 300000)
+        SETTINGS["BatteryAlertThreshold"] := IniRead(iniFile, "Battery", "AlertThreshold", 20)
+        SETTINGS["BatteryAlertCooldown"] := IniRead(iniFile, "Battery", "AlertCooldownMs", 1800000) ; 30 دقيقة
+
+        ; --- إعدادات واجهة الداشبورد (اختيارية) ---
+        SETTINGS["DashboardX"] := IniRead(iniFile, "Dashboard", "X", 10)
+        SETTINGS["DashboardY"] := IniRead(iniFile, "Dashboard", "Y", 120)
+        SETTINGS["DashboardHideOnHover"] := IniRead(iniFile, "Dashboard", "HideOnHover", 0)
+
+        ; --- حالات مُصرح بها لمراقبة الكلمة (CSV) ---
+        local statusesCsv := IniRead(iniFile, "WordMonitor", "AllowedStatuses", "Online")
+        SETTINGS["TargetMonitorStatuses"] := []
+        for part in StrSplit(statusesCsv, ",") {
+            SETTINGS["TargetMonitorStatuses"].Push(Trim(part))
+        }
     } catch as ex {
         MsgBox("Error reading settings.ini:`n" . ex.Message, "Configuration Error", 4112)
         ExitApp
