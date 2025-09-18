@@ -238,3 +238,88 @@ Line: 82
 [20250918233333] [INFO] Master script loaded and initialized successfully.
 [20250918233433] [INFO] Front Line window not found. Attempting to restart app.
 [20250918233433] [INFO] Front Line launched from shortcut.
+[20250918233533] [INFO] Front Line window not found. Attempting to restart app.
+[20250918233533] [INFO] Front Line launched from shortcut.
+[20250918233633] [INFO] Front Line window not found. Attempting to restart app.
+[20250918233633] [INFO] Front Line launched from shortcut.
+[20250918233733] [INFO] Front Line window not found. Attempting to restart app.
+[20250918233733] [INFO] Front Line launched from shortcut.
+[20250918233743] [INFO] Telegram Rich Message SUCCESS: 📊 Session Report (on exit)
+[20250918233743] [INFO] STATE Map has been re-initialized.
+[20250918233743] [INFO] STATE Map has been re-initialized.
+[20250918233743] [INFO] Telegram is enabled: BOT_TOKEN/CHAT_ID loaded.
+[20250918233743] [INFO] --- Script Starting ---
+[20250918233743] [INFO] SelfTest: All required files/shortcuts found.
+[20250918233743] [INFO] Frontline not found on start. Attempting to launch.
+[20250918233743] [INFO] Front Line launched from shortcut.
+[20250918233758] [INFO] Timers initialized. Running.
+[20250918233758] [INFO] STATE Map has been re-initialized.
+[20250918233758] [INFO] Master script loaded and initialized successfully.
+[20250918233858] [INFO] Front Line window not found. Attempting to restart app.
+[20250918233859] [INFO] Front Line launched from shortcut.
+[20250918233958] [INFO] Front Line window not found. Attempting to restart app.
+[20250918233958] [INFO] Front Line launched from shortcut.
+[20250918234058] [INFO] Front Line window not found. Attempting to restart app.
+[20250918234058] [INFO] Front Line launched from shortcut.
+[20250918234158] [INFO] Front Line window not found. Attempting to restart app.
+[20250918234158] [INFO] Front Line launched from shortcut.
+[20250918234258] [INFO] Front Line window not found. Attempting to restart app.
+[20250918234258] [INFO] Front Line launched from shortcut.
+[20250918234358] [INFO] Front Line window not found. Attempting to restart app.
+[20250918234358] [INFO] Front Line launched from shortcut.
+[20250918234458] [INFO] Front Line window not found. Attempting to restart app.
+[20250918234458] [INFO] Front Line launched from shortcut.
+[20250918234542] [INFO] Telegram Rich Message SUCCESS: 📊 Session Report (on exit)
+[20250918234542] [INFO] STATE Map has been re-initialized.
+[20250918234542] [INFO] STATE Map has been re-initialized.
+[20250918234542] [INFO] Telegram is enabled: BOT_TOKEN/CHAT_ID loaded.
+[20250918234542] [INFO] --- Script Starting ---
+[20250918234542] [INFO] SelfTest: All required files/shortcuts found.
+[20250918234542] [INFO] Frontline not found on start. Attempting to launch.
+[20250918234542] [INFO] Front Line launched from shortcut.
+[20250918234557] [INFO] Timers initialized. Running.
+[20250918234557] [INFO] STATE Map has been re-initialized.
+[20250918234557] [INFO] Master script loaded and initialized successfully.
+[20250918234657] [INFO] Front Line window not found. Attempting to restart app.
+[20250918234657] [INFO] Front Line launched from shortcut.
+[20250918234757] [INFO] Front Line window not found. Attempting to restart app.
+[20250918234757] [INFO] Front Line launched from shortcut.
+[20250918234857] [INFO] Front Line window not found. Attempting to restart app.
+[20250918234857] [INFO] Front Line launched from shortcut.
+[20250918234957] [INFO] Front Line window not found. Attempting to restart app.
+[20250918234957] [INFO] Front Line launched from shortcut.
+[20250918235057] [INFO] Front Line window not found. Attempting to restart app.
+[20250918235057] [INFO] Front Line launched from shortcut.
+[20250918235157] [INFO] Front Line window not found. Attempting to restart app.
+[20250918235157] [INFO] Front Line launched from shortcut.
+[20250918235230] [INFO] Telegram Rich Message SUCCESS: 📊 Session Report (on exit)
+[20250918235230] [INFO] STATE Map has been re-initialized.
+[20250918235230] [INFO] STATE Map has been re-initialized.
+[20250918235230] [INFO] Telegram is enabled: BOT_TOKEN/CHAT_ID loaded.
+[20250918235230] [INFO] --- Script Starting ---
+[20250918235230] [INFO] SelfTest: All required files/shortcuts found.
+[20250918235230] [INFO] Frontline not found on start. Attempting to launch.
+[20250918235230] [INFO] Front Line launched from shortcut.
+[20250918235245] [INFO] Timers initialized. Running.
+[20250918235245] [INFO] STATE Map has been re-initialized.
+[20250918235245] [INFO] Master script loaded and initialized successfully.
+[20250918235333] [INFO] Telegram Rich Message SUCCESS: 📊 Session Report (on exit)
+[20250918235333] [INFO] STATE Map has been re-initialized.
+[20250918235333] [INFO] STATE Map has been re-initialized.
+[20250918235333] [INFO] Telegram is enabled: BOT_TOKEN/CHAT_ID loaded.
+[20250918235333] [INFO] --- Script Starting ---
+[20250918235333] [INFO] SelfTest: All required files/shortcuts found.
+[20250918235333] [INFO] Frontline not found on start. Attempting to launch.
+[20250918235333] [INFO] Front Line launched from shortcut.
+[20250919002914] [INFO] STATE Map has been re-initialized.
+[20250919002914] [INFO] STATE Map has been re-initialized.
+[20250919002914] [INFO] Telegram is enabled: BOT_TOKEN/CHAT_ID loaded.
+[20250919002914] [INFO] --- Script Starting ---
+[20250919002914] [INFO] SelfTest: All required files/shortcuts found.
+[20250919002914] [INFO] Frontline not found on start. Attempting to launch.
+[20250919002914] [INFO] Front Line launched from shortcut.
+[20250919002929] [INFO] Timers initialized. Running.
+[20250919002929] [INFO] STATE Map has been re-initialized.
+[20250919002929] [INFO] Master script loaded and initialized successfully.
+[20250919003029] [INFO] Front Line window not found. Attempting to restart app.
+[20250919003029] [INFO] Front Line launched from shortcut.

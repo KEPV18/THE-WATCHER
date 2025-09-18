@@ -55,6 +55,8 @@ InitializeScript() {
     SetTimer(RefreshTimer, SETTINGS["RefreshInterval"]) 
     SetTimer(MonitorTargetTimer, SETTINGS["MainLoopInterval"]) 
     SetTimer(UpdateDashboardTimer, 1000)
+    ; --- جديد: راقب نشاط المستخدم لتحديث lastUserActivity بالوقت الحقيقي ---
+    SetTimer(ActivityMonitorTimer, SETTINGS.Has("ActivityPollIntervalMs") ? SETTINGS["ActivityPollIntervalMs"] : 150)
     Info("Timers initialized. Running.")
     ; ScheduleNextDailyReport() ; تم إيقاف التقرير اليومي المجدول بناءً على طلبك
 
@@ -87,6 +89,7 @@ InitializeState() {
     STATE["lastStatusCheckTime"] := 0
     STATE["isMonitoringPaused"] := false
     STATE["lastUserActivity"] := A_TickCount
+    STATE["lastActivityType"] := "none"
     STATE["lastRefreshTimestamp"] := "Never"
     STATE["lastStayOnlineTimestamp"] := "Never"
     STATE["lastStatusCheckTimestamp"] := "Never"
@@ -223,6 +226,13 @@ LoadSettings() {
         for part in StrSplit(statusesCsv, ",") {
             SETTINGS["TargetMonitorStatuses"].Push(Trim(part))
         }
+
+        ; --- إعدادات مراقبة النشاط ---
+        SETTINGS["ActivityPollIntervalMs"] := IniRead(iniFile, "Activity", "PollIntervalMs", 150)
+        SETTINGS["ActivityMoveThresholdPx"] := IniRead(iniFile, "Activity", "MoveThresholdPx", 2)
+        SETTINGS["ActivityKeyboardResetMs"] := IniRead(iniFile, "Activity", "KeyboardResetMs", 120)
+        SETTINGS["ActivityIdleGateMs"] := IniRead(iniFile, "Activity", "IdleGateMs", 3000)
+        SETTINGS["ActivityDebug"] := IniRead(iniFile, "Activity", "Debug", 0)
     } catch as ex {
         MsgBox("Error reading settings.ini:`n" . ex.Message, "Configuration Error", 4112)
         ExitApp

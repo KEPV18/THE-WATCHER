@@ -1,0 +1,61 @@
+﻿2025-09-19 00:10:32 - StartTest: Begin step 1
+2025-09-19 00:10:37 - Mouse success after idle: lastIdle=4813ms dx=26 dy=12
+2025-09-19 00:10:47 - Keyboard success after idle: lastIdle=7812ms
+2025-09-19 00:10:50 - StopTest: timer stopped
+2025-09-19 00:17:27 - StartTest: Begin step 1
+2025-09-19 00:17:32 - Mouse success after idle: lastIdle=3937ms dx=68 dy=31
+2025-09-19 00:17:39 - Keyboard success after idle: lastIdle=4703ms
+2025-09-19 00:17:41 - StartTest: Begin step 1
+2025-09-19 00:17:42 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:42 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:42 - Mouse ignored (idle gate not met): lastIdle=15ms
+2025-09-19 00:17:42 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:42 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:42 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:43 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:43 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:43 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:43 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:43 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:43 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:43 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:43 - Mouse ignored (idle gate not met): lastIdle=15ms
+2025-09-19 00:17:43 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:44 - Mouse ignored (idle gate not met): lastIdle=15ms
+2025-09-19 00:17:44 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:44 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:44 - Mouse ignored (idle gate not met): lastIdle=15ms
+2025-09-19 00:17:44 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:44 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:44 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:44 - Mouse ignored (idle gate not met): lastIdle=15ms
+2025-09-19 00:17:45 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:45 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:45 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:45 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:45 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:45 - Mouse ignored (idle gate not met): lastIdle=15ms
+2025-09-19 00:17:45 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:45 - Mouse ignored (idle gate not met): lastIdle=15ms
+2025-09-19 00:17:45 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:47 - Mouse ignored (idle gate not met): lastIdle=1094ms
+2025-09-19 00:17:47 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:47 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:47 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:48 - Mouse ignored (idle gate not met): lastIdle=547ms
+2025-09-19 00:17:48 - Mouse ignored (idle gate not met): lastIdle=15ms
+2025-09-19 00:17:48 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:48 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:48 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:48 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:48 - Mouse ignored (idle gate not met): lastIdle=15ms
+2025-09-19 00:17:48 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:49 - Mouse ignored (idle gate not met): lastIdle=15ms
+2025-09-19 00:17:49 - Mouse ignored (idle gate not met): lastIdle=16ms
+2025-09-19 00:17:49 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:49 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:49 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:49 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:49 - Mouse ignored (idle gate not met): lastIdle=0ms
+2025-09-19 00:17:54 - Mouse success after idle: lastIdle=4328ms dx=26 dy=36
+2025-09-19 00:18:00 - Keyboard success after idle: lastIdle=4547ms

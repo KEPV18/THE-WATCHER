@@ -186,14 +186,71 @@ ImageListSearch(&outX, &outY, images, area) {
     return false
 }
 
+; --- Activity Monitor Timer ---
+ActivityMonitorTimer(*) {
+    global STATE, SETTINGS
+    static lastMouseX := 0, lastMouseY := 0
+    static lastIdlePhysical := A_TimeIdlePhysical
+
+    ; تحقّق من الخمول الحقيقي المدموج
+    idlePhysical := A_TimeIdlePhysical
+    idleSinceInternal := A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount)
+    idleCombined := Min(idlePhysical, idleSinceInternal)
+
+    ; قراءة موقع الماوس ومقارنة الحركة
+    local mx := 0, my := 0
+    MouseGetPos &mx, &my
+    dx := Abs(mx - lastMouseX)
+    dy := Abs(my - lastMouseY)
+    moveThr := SETTINGS.Has("ActivityMoveThresholdPx") ? SETTINGS["ActivityMoveThresholdPx"] : 2
+    moved := (dx >= moveThr || dy >= moveThr)
+
+    ; تحديد نوع النشاط
+    evType := "none"
+    if (moved) {
+        evType := "mouse"
+    } else {
+        keyResetMs := SETTINGS.Has("ActivityKeyboardResetMs") ? SETTINGS["ActivityKeyboardResetMs"] : 120
+        if (idlePhysical < keyResetMs && lastIdlePhysical >= keyResetMs * 4) {
+            ; يعتبر كيبورد عندما ينخفض الـ idle فجأة بدون حركة ماوس
+            evType := "keyboard"
+        }
+    }
+
+    ; بوابة خمول قبل قبول الحدث (يقلل الفالس)
+    gateMs := SETTINGS.Has("ActivityIdleGateMs") ? SETTINGS["ActivityIdleGateMs"] : 3000
+    wasIdleLong := (lastIdlePhysical >= gateMs)
+
+    if (evType != "none") {
+        ; سجّل نوع النشاط دومًا، لكن لا تحدّث lastUserActivity إلا إذا سبقها خمول كافي
+        STATE["lastActivityType"] := evType
+        if (wasIdleLong || moved) {
+            STATE["lastUserActivity"] := A_TickCount
+            if (SETTINGS.Has("ActivityDebug") && SETTINGS["ActivityDebug"]) {
+                Info("Activity: " . evType . " (dx=" . dx . ", dy=" . dy . ", idle=" . idlePhysical . ")")
+            }
+        }
+    }
+
+    ; تخزين القيم للإطار القادم
+    lastMouseX := mx
+    lastMouseY := my
+    lastIdlePhysical := idlePhysical
+}
+
+; --- تحديث StayOnlineTimer لاستخدام idleCombined ---
 StayOnlineTimer(*) {
     global SETTINGS, STATE
-    if (!WinExist(SETTINGS["FrontlineWinTitle"]) || (A_TickCount - STATE["lastUserActivity"] < SETTINGS["UserIdleThreshold"]))
+    if (!WinExist(SETTINGS["FrontlineWinTitle"]))
+        return
+    idlePhysical := A_TimeIdlePhysical
+    idleSinceInternal := A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount)
+    idleCombined := Min(idlePhysical, idleSinceInternal)
+    if (idleCombined < SETTINGS["UserIdleThreshold"]) ; لا ينفّذ أثناء النشاط الحقيقي
         return
     current := STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "Unknown"
     if (current != "Online")
         return
-    NudgeMouseAwayFromDashboard()
     res := ClickStayOnlineButton()
     if (res) {
         STATE["lastStayOnlineClickTime"] := A_TickCount
@@ -201,7 +258,6 @@ StayOnlineTimer(*) {
         Info("Stay Online click performed - timestamp updated.")
         STATE["actionBusyUntil"] := A_TickCount + 3000
     } else {
-        ; لم يتم العثور على الزر — اضغط في مركز المنطقة كاحتياطي
         stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
         cx := (stayOnlineArea["x1"] + stayOnlineArea["x2"]) // 2
         cy := (stayOnlineArea["y1"] + stayOnlineArea["y2"]) // 2
@@ -212,17 +268,16 @@ StayOnlineTimer(*) {
         STATE["lastStayOnlineTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
         STATE["actionBusyUntil"] := A_TickCount + 3000
         Info("Stay Online: button not detected, performed fallback center click.")
-        ; أعد المحاولة سريعًا بعد ثانية واحدة إن ظهر الزر
         Sleep 1000
         if (ClickStayOnlineButton()) {
             STATE["lastStayOnlineClickTime"] := A_TickCount
             STATE["lastStayOnlineTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
             STATE["actionBusyUntil"] := A_TickCount + 3000
-            Info("Stay Online: found and clicked after fallback.")
         }
     }
 }
 
+; --- تحديث RefreshTimer لاستخدام idleCombined ومنع التحريك أثناء النشاط ---
 RefreshTimer(*) {
     global SETTINGS, STATE
     if (!WinExist(SETTINGS["FrontlineWinTitle"]))
@@ -232,24 +287,27 @@ RefreshTimer(*) {
         Info("Refresh skipped: status is " . current)
         return
     }
-    NudgeMouseAwayFromDashboard()
+    idlePhysical := A_TimeIdlePhysical
+    idleSinceInternal := A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount)
+    idleCombined := Min(idlePhysical, idleSinceInternal)
+    if (idleCombined < SETTINGS["UserIdleThreshold"]) {
+        Info("Refresh skipped: user active (idleCombined=" . idleCombined . ", thr=" . SETTINGS["UserIdleThreshold"] . ").")
+        return
+    }
     if (STATE.Has("actionBusyUntil") && A_TickCount < STATE["actionBusyUntil"]) {
         Info("Refresh skipped (cooldown after action).")
         return
     }
-    
-    ; فحص وجود زر Stay Online قبل الريفريش
+
     stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
     local sX, sY
     stayVisible := (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0)
         ? ImageListSearch(&sX, &sY, SETTINGS["StayOnlineImageList"], stayOnlineArea)
         : ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)
-    
     if (stayVisible) {
         Info("Stay Online button found before refresh - clicking it first")
         Click(sX, sY)
-        Sleep(1000) ; انتظار ثانية واحدة بعد الضغط على Stay Online
-        ; فحص مرة أخرى للتأكد من اختفاء النافذة
+        Sleep(1000)
         stillVisible := (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0)
             ? ImageListSearch(&sX, &sY, SETTINGS["StayOnlineImageList"], stayOnlineArea)
             : ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)
@@ -258,12 +316,15 @@ RefreshTimer(*) {
             return
         }
     }
-    
+
+    Info("Refresh proceeding: idleCombined=" . idleCombined . " >= thr=" . SETTINGS["UserIdleThreshold"] . ".")
     Click(SETTINGS["RefreshX"], SETTINGS["RefreshY"])
-    NudgeMouseAwayFromDashboard()
+    CoordMode "Mouse", "Screen"
+    tx := Min(A_ScreenWidth - 5, SETTINGS["RefreshX"] + 150)
+    ty := Min(A_ScreenHeight - 5, SETTINGS["RefreshY"] + 150)
+    MouseMove tx, ty, 0
     Info("Refresh performed - Time-based")
     STATE["lastRefreshTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
-    ; امنح التطبيق مهلة قبل فحص التارجت لتفادي الفالس-نيجاتيف أثناء إعادة التحميل
     delayMs := SETTINGS.Has("PostRefreshDelayMs") ? SETTINGS["PostRefreshDelayMs"] : 2500
     STATE["actionBusyUntil"] := A_TickCount + delayMs
 }
@@ -279,7 +340,8 @@ MonitorTargetTimer(*) {
     if (A_TickCount - lastIdleCheck < 10000)
         return
     lastIdleCheck := A_TickCount
-    NudgeMouseAwayFromDashboard()
+    ; إزالة تحريك الماوس الدوري لتجنّب إزعاج المستخدم
+    ; NudgeMouseAwayFromDashboard()
 
     allowed := SETTINGS.Has("TargetMonitorStatuses") ? SETTINGS["TargetMonitorStatuses"] : ["Online"]
     current := STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "Unknown"
@@ -321,7 +383,8 @@ MonitorTargetTimer(*) {
         }
 
         idlePhysical := A_TimeIdlePhysical
-        idleCombined := Max(idlePhysical, A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount))
+        idleSinceInternal := A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount)
+        idleCombined := Min(idlePhysical, idleSinceInternal)
         idleOk := idleCombined >= SETTINGS["UserIdleThreshold"]
         if !idleOk {
             if (STATE["isAlarmPlaying"]) {
