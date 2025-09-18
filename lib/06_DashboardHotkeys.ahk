@@ -90,11 +90,9 @@ UpdateDashboard() {
         text .= "Last Stay Online: " . lastStay
     }
 
-    ; كاش لتقليل الفليكر
+    ; كاش لتقليل الفليكر - لا يمنع إعادة الإظهار بعد الإخفاء المؤقت
     static prevText := ""
-    if (text = prevText)
-        return
-    prevText := text
+    static wasHidden := false
 
     tooltipId := 20
     tooltipX := (IsObject(SETTINGS) && SETTINGS.Has("DashboardX")) ? SETTINGS["DashboardX"] : 10
@@ -115,6 +113,7 @@ UpdateDashboard() {
 
     if (A_TickCount < hideUntilTick) {
         ToolTip(, , , tooltipId)
+        wasHidden := true
         return
     }
 
@@ -123,11 +122,18 @@ UpdateDashboard() {
         if (mx >= tooltipX && mx <= tooltipX + widthPx && my >= tooltipY && my <= tooltipY + heightPx) {
             ToolTip(, , , tooltipId)
             hideUntilTick := A_TickCount + 1500
+            wasHidden := true
             return
         }
     }
 
+    ; لا نتخطى إعادة الإظهار إذا كان النص لم يتغير لكن كان مخفيًا مؤقتًا
+    if (text = prevText && !wasHidden)
+        return
+
+    prevText := text
     ToolTip(text, tooltipX, tooltipY, tooltipId)
+    wasHidden := false
 }
 
 ; --- Hotkeys ---
@@ -147,14 +153,20 @@ UpdateDashboard() {
         return
     }
 
+    ; اسكت أي إنذار يعمل (عام أو شبكة) فورًا، وامنح مهلة كتم لإنذار الشبكة
     if (STATE.Has("isAlarmPlaying") && STATE["isAlarmPlaying"]) {
         STATE["isAlarmPlaying"] := false
-        SetTimer(AlarmBeep, 0)
-        STATE["offlineFixAttempts"] := 0
-        STATE["isMonitoringPaused"] := true
-        Info("Alarm stopped by CapsLock. Monitoring paused for " . (SETTINGS["ManualPauseDuration"]/1000) . " seconds.")
-        SetTimer(ResumeMonitoring, -SETTINGS["ManualPauseDuration"])
     }
+    if (STATE.Has("isNetAlarmPlaying") && STATE["isNetAlarmPlaying"]) {
+        STATE["isNetAlarmPlaying"] := false
+    }
+    SetTimer(AlarmBeep, 0)
+    STATE["offlineFixAttempts"] := 0
+    STATE["isMonitoringPaused"] := true
+    STATE["netAlarmMuteUntil"] := A_TickCount + (SETTINGS.Has("ManualPauseDuration") ? SETTINGS["ManualPauseDuration"] : 180000)
+    Info("Alarm(s) stopped by CapsLock. Monitoring paused for " . (SETTINGS["ManualPauseDuration"]/1000) . " seconds.")
+    SetTimer(ResumeMonitoring, -SETTINGS["ManualPauseDuration"])
+
     STATE["lastUserActivity"] := A_TickCount
 }
 

@@ -202,6 +202,7 @@ LoadSettings() {
         SETTINGS["StatusCheckInterval"] := IniRead(iniFile, "Timings", "StatusCheckInterval", 90000)
         SETTINGS["WordMonitorUserIdleReset"] := IniRead(iniFile, "Timings", "WordMonitorUserIdleReset", 60000)
         SETTINGS["ManualPauseDuration"] := IniRead(iniFile, "Timings", "ManualPauseDuration", 180000)
++       SETTINGS["PostRefreshDelayMs"] := IniRead(iniFile, "Timings", "PostRefreshDelayMs", 2500)
         SETTINGS["ImageSearchTolerance"] := IniRead(iniFile, "Search", "Tolerance", 30)
 
         ; --- إعدادات إضافية ---

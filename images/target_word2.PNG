@@ -1,0 +1,4 @@
+<svg width="80" height="20" xmlns="http://www.w3.org/2000/svg">
+  <rect width="80" height="20" fill="#ff0000" stroke="#000" stroke-width="1"/>
+  <text x="40" y="14" text-anchor="middle" font-family="Arial" font-size="9" fill="#fff">TargetWord2</text>
+</svg>

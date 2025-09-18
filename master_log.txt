@@ -185,3 +185,54 @@ Line: 82
 [20250918014636] [INFO] Timers initialized. Running.
 [20250918014636] [INFO] STATE Map has been re-initialized.
 [20250918014636] [INFO] Master script loaded and initialized successfully.
+[20250918014657] [INFO] Telegram Rich Message SUCCESS: 📊 Session Report (on exit)
+[20250918233108] [INFO] STATE Map has been re-initialized.
+[20250918233108] [INFO] STATE Map has been re-initialized.
+[20250918233108] [INFO] Telegram is enabled: BOT_TOKEN/CHAT_ID loaded.
+[20250918233108] [INFO] --- Script Starting ---
+[20250918233108] [INFO] SelfTest: All required files/shortcuts found.
+[20250918233108] [INFO] Frontline not found on start. Attempting to launch.
+[20250918233108] [INFO] Front Line launched from shortcut.
+[20250918233123] [INFO] Timers initialized. Running.
+[20250918233123] [INFO] STATE Map has been re-initialized.
+[20250918233123] [INFO] Master script loaded and initialized successfully.
+[20250918233139] [INFO] Telegram Rich Message SUCCESS: 📊 Session Report (on exit)
+[20250918233141] [INFO] STATE Map has been re-initialized.
+[20250918233141] [INFO] STATE Map has been re-initialized.
+[20250918233141] [INFO] Telegram is enabled: BOT_TOKEN/CHAT_ID loaded.
+[20250918233141] [INFO] --- Script Starting ---
+[20250918233141] [INFO] SelfTest: All required files/shortcuts found.
+[20250918233141] [INFO] Frontline not found on start. Attempting to launch.
+[20250918233141] [INFO] Front Line launched from shortcut.
+[20250918233152] [INFO] STATE Map has been re-initialized.
+[20250918233152] [INFO] STATE Map has been re-initialized.
+[20250918233152] [INFO] Telegram is enabled: BOT_TOKEN/CHAT_ID loaded.
+[20250918233152] [INFO] --- Script Starting ---
+[20250918233152] [INFO] SelfTest: All required files/shortcuts found.
+[20250918233152] [INFO] Frontline not found on start. Attempting to launch.
+[20250918233152] [INFO] Front Line launched from shortcut.
+[20250918233207] [INFO] Timers initialized. Running.
+[20250918233207] [INFO] STATE Map has been re-initialized.
+[20250918233207] [INFO] Master script loaded and initialized successfully.
+[20250918233301] [INFO] Telegram Rich Message SUCCESS: 📊 Session Report (on exit)
+[20250918233301] [INFO] STATE Map has been re-initialized.
+[20250918233301] [INFO] STATE Map has been re-initialized.
+[20250918233301] [INFO] Telegram is enabled: BOT_TOKEN/CHAT_ID loaded.
+[20250918233301] [INFO] --- Script Starting ---
+[20250918233301] [INFO] SelfTest: All required files/shortcuts found.
+[20250918233301] [INFO] Frontline not found on start. Attempting to launch.
+[20250918233301] [INFO] Front Line launched from shortcut.
+[20250918233317] [INFO] Timers initialized. Running.
+[20250918233317] [INFO] STATE Map has been re-initialized.
+[20250918233317] [INFO] Master script loaded and initialized successfully.
+[20250918233317] [INFO] Telegram Rich Message SUCCESS: 📊 Session Report (on exit)
+[20250918233318] [INFO] STATE Map has been re-initialized.
+[20250918233318] [INFO] STATE Map has been re-initialized.
+[20250918233318] [INFO] Telegram is enabled: BOT_TOKEN/CHAT_ID loaded.
+[20250918233318] [INFO] --- Script Starting ---
+[20250918233318] [INFO] SelfTest: All required files/shortcuts found.
+[20250918233318] [INFO] Frontline not found on start. Attempting to launch.
+[20250918233318] [INFO] Front Line launched from shortcut.
+[20250918233333] [INFO] Timers initialized. Running.
+[20250918233333] [INFO] STATE Map has been re-initialized.
+[20250918233333] [INFO] Master script loaded and initialized successfully.

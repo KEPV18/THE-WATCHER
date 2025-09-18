@@ -212,6 +212,14 @@ StayOnlineTimer(*) {
         STATE["lastStayOnlineTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
         STATE["actionBusyUntil"] := A_TickCount + 3000
         Info("Stay Online: button not detected, performed fallback center click.")
+        ; أعد المحاولة سريعًا بعد ثانية واحدة إن ظهر الزر
+        Sleep 1000
+        if (ClickStayOnlineButton()) {
+            STATE["lastStayOnlineClickTime"] := A_TickCount
+            STATE["lastStayOnlineTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
+            STATE["actionBusyUntil"] := A_TickCount + 3000
+            Info("Stay Online: found and clicked after fallback.")
+        }
     }
 }
 
@@ -229,24 +237,45 @@ RefreshTimer(*) {
         Info("Refresh skipped (cooldown after action).")
         return
     }
+    
+    ; فحص وجود زر Stay Online قبل الريفريش
     stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
     local sX, sY
     stayVisible := (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0)
         ? ImageListSearch(&sX, &sY, SETTINGS["StayOnlineImageList"], stayOnlineArea)
         : ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)
+    
     if (stayVisible) {
-        Info("Refresh skipped: Stay Online window visible.")
-        return
+        Info("Stay Online button found before refresh - clicking it first")
+        Click(sX, sY)
+        Sleep(1000) ; انتظار ثانية واحدة بعد الضغط على Stay Online
+        ; فحص مرة أخرى للتأكد من اختفاء النافذة
+        stillVisible := (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0)
+            ? ImageListSearch(&sX, &sY, SETTINGS["StayOnlineImageList"], stayOnlineArea)
+            : ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)
+        if (stillVisible) {
+            Info("Stay Online window still visible after click - skipping refresh")
+            return
+        }
     }
+    
     Click(SETTINGS["RefreshX"], SETTINGS["RefreshY"])
     NudgeMouseAwayFromDashboard()
     Info("Refresh performed - Time-based")
     STATE["lastRefreshTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
+    ; امنح التطبيق مهلة قبل فحص التارجت لتفادي الفالس-نيجاتيف أثناء إعادة التحميل
+    delayMs := SETTINGS.Has("PostRefreshDelayMs") ? SETTINGS["PostRefreshDelayMs"] : 2500
+    STATE["actionBusyUntil"] := A_TickCount + delayMs
 }
 
 MonitorTargetTimer(*) {
     global SETTINGS, STATE
     static lastIdleCheck := 0
+    ; تجنّب الفحص أثناء نافذة الانشغال بعد أي إجراء (مثل Refresh أو Stay Online)
+    if (STATE.Has("actionBusyUntil") && A_TickCount < STATE["actionBusyUntil"]) {
+        ; Info("MonitorTarget skipped (post action delay)")
+        return
+    }
     if (A_TickCount - lastIdleCheck < 10000)
         return
     lastIdleCheck := A_TickCount
@@ -270,6 +299,7 @@ MonitorTargetTimer(*) {
         return
     }
 
+    ; تعريف منطقة البحث عن التارجت
     targetArea := Map("x1", SETTINGS["TargetAreaTopLeftX"], "y1", SETTINGS["TargetAreaTopLeftY"], "x2", SETTINGS["TargetAreaBottomRightX"], "y2", SETTINGS["TargetAreaBottomRightY"])
     local foundX, foundY
     hasTarget := (SETTINGS.Has("TargetImageList") && SETTINGS["TargetImageList"].Length > 0)
@@ -532,6 +562,8 @@ DailyReportTimer(*) {
 NetCheckTimer(*) {
     global STATE, SETTINGS
     online := HttpCheckInternet(SETTINGS.Has("NetCheckTimeoutMs") ? SETTINGS["NetCheckTimeoutMs"] : 800)
+    muted := STATE.Has("netAlarmMuteUntil") && (A_TickCount < STATE["netAlarmMuteUntil"])
+
     if (online) {
         if (!STATE["netOnline"]) {
             STATE["netOnline"] := true
@@ -548,18 +580,25 @@ NetCheckTimer(*) {
                 ))
             }
             FlushTelegramQueue()
-            ; لو كان إنذار الشبكة شغال، أوقفه الآن (وأبقِ أي إنذار آخر كما هو)
+            ; أوقف إنذار النت عند عودة الاتصال
             if (STATE.Has("isNetAlarmPlaying") && STATE["isNetAlarmPlaying"]) {
                 STATE["isNetAlarmPlaying"] := false
-                if !(STATE.Has("isAlarmPlaying") && STATE["isAlarmPlaying"])
+                if !(STATE.Has("isAlarmPlaying") && STATE["isAlarmPlaying"]) {
                     SetTimer(AlarmBeep, 0)
+                }
             }
+        }
+        ; صفّر مرجع بدء مؤهل إنذار الشبكة إذا كان موجوداً
+        if (STATE.Has("netAlarmCandidateSince")) {
+            STATE.Delete("netAlarmCandidateSince")
         }
     } else {
         if (STATE["netOnline"]) {
+            ; انتقال إلى حالة غير متصل
             STATE["netOnline"] := false
             STATE["netOutageOngoing"] := true
             STATE["netLastChangeTick"] := A_TickCount
+            STATE["netAlarmCandidateSince"] := A_TickCount
             ShowLocalNotification("❌ Internet DISCONNECTED")
             QueueTelegram(Map(
                 "type", "text",
@@ -567,10 +606,34 @@ NetCheckTimer(*) {
                 "details", Map("Time", FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss"))
             ))
             STATE["lastTelegramStatus"] := FormatTime(A_Now, "HH:mm:ss") . " - QUEUED: Internet Disconnected"
-            ; شغِّل إنذار الشبكة فورًا حتى لو الانقطاع ثانية واحدة
-            STATE["isNetAlarmPlaying"] := true
-            if !(STATE.Has("isAlarmPlaying") && STATE["isAlarmPlaying"]) {
-                SetTimer(AlarmBeep, 300)
+            ; لا نبدأ الإنذار الصوتي الآن — ننتظر 60 ثانية أو حتى انتهاء الكتم
+            if (STATE.Has("isNetAlarmPlaying") && STATE["isNetAlarmPlaying"]) {
+                STATE["isNetAlarmPlaying"] := false
+                if !(STATE.Has("isAlarmPlaying") && STATE["isAlarmPlaying"]) {
+                    SetTimer(AlarmBeep, 0)
+                }
+            }
+        } else {
+            ; ما زلنا غير متصلين — افحص شروط بدء الإنذار
+            startTick := STATE.Has("netAlarmCandidateSince") ? STATE["netAlarmCandidateSince"] : STATE["netLastChangeTick"]
+            elapsed := A_TickCount - startTick
+            if (elapsed >= 60000) { ; دقيقة واحدة
+                if (muted) {
+                    ; أثناء الكتم، تأكد من إيقاف إنذار النت
+                    if (STATE.Has("isNetAlarmPlaying") && STATE["isNetAlarmPlaying"]) {
+                        STATE["isNetAlarmPlaying"] := false
+                        if !(STATE.Has("isAlarmPlaying") && STATE["isAlarmPlaying"]) {
+                            SetTimer(AlarmBeep, 0)
+                        }
+                    }
+                } else {
+                    if !(STATE.Has("isNetAlarmPlaying") && STATE["isNetAlarmPlaying"]) {
+                        STATE["isNetAlarmPlaying"] := true
+                        if !(STATE.Has("isAlarmPlaying") && STATE["isAlarmPlaying"]) {
+                            SetTimer(AlarmBeep, 300)
+                        }
+                    }
+                }
             }
         }
     }
