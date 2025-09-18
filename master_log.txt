@@ -236,3 +236,5 @@ Line: 82
 [20250918233333] [INFO] Timers initialized. Running.
 [20250918233333] [INFO] STATE Map has been re-initialized.
 [20250918233333] [INFO] Master script loaded and initialized successfully.
+[20250918233433] [INFO] Front Line window not found. Attempting to restart app.
+[20250918233433] [INFO] Front Line launched from shortcut.
