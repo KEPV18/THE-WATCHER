@@ -90,6 +90,7 @@ InitializeState() {
     STATE["isMonitoringPaused"] := false
     STATE["lastUserActivity"] := A_TickCount
     STATE["lastActivityType"] := "none"
+    STATE["synthInputUntil"] := 0
     STATE["lastRefreshTimestamp"] := "Never"
     STATE["lastStayOnlineTimestamp"] := "Never"
     STATE["lastStatusCheckTimestamp"] := "Never"
@@ -205,7 +206,7 @@ LoadSettings() {
         SETTINGS["StatusCheckInterval"] := IniRead(iniFile, "Timings", "StatusCheckInterval", 90000)
         SETTINGS["WordMonitorUserIdleReset"] := IniRead(iniFile, "Timings", "WordMonitorUserIdleReset", 60000)
         SETTINGS["ManualPauseDuration"] := IniRead(iniFile, "Timings", "ManualPauseDuration", 180000)
-+       SETTINGS["PostRefreshDelayMs"] := IniRead(iniFile, "Timings", "PostRefreshDelayMs", 2500)
+        SETTINGS["PostRefreshDelayMs"] := IniRead(iniFile, "Timings", "PostRefreshDelayMs", 2500)
         SETTINGS["ImageSearchTolerance"] := IniRead(iniFile, "Search", "Tolerance", 30)
 
         ; --- إعدادات إضافية ---
@@ -232,6 +233,7 @@ LoadSettings() {
         SETTINGS["ActivityMoveThresholdPx"] := IniRead(iniFile, "Activity", "MoveThresholdPx", 2)
         SETTINGS["ActivityKeyboardResetMs"] := IniRead(iniFile, "Activity", "KeyboardResetMs", 120)
         SETTINGS["ActivityIdleGateMs"] := IniRead(iniFile, "Activity", "IdleGateMs", 3000)
+        SETTINGS["ActivitySynthIgnoreMs"] := IniRead(iniFile, "Activity", "SynthIgnoreMs", 2000)
         SETTINGS["ActivityDebug"] := IniRead(iniFile, "Activity", "Debug", 0)
     } catch as ex {
         MsgBox("Error reading settings.ini:`n" . ex.Message, "Configuration Error", 4112)

@@ -148,25 +148,28 @@ EnsureOnlineStatus() {
     global SETTINGS
     Info("Executing 3-step fix for offline status...")
     Click(SETTINGS["FixStep1X"], SETTINGS["FixStep1Y"])
+    STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
     Sleep(1500)
     Click(SETTINGS["FixStep2X"], SETTINGS["FixStep2Y"])
+    STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
     Sleep(1500)
     Click(SETTINGS["FixStep3X"], SETTINGS["FixStep3Y"])
+    STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
     Sleep(1500)
     Info("Fix clicks performed.")
 }
 
 ; يحرك الماوس بعيدًا عن منطقة الداشبورد إذا كانت تختفي عند المرور عليها
 NudgeMouseAwayFromDashboard() {
-    global SETTINGS
+    global SETTINGS, STATE
     try {
         if (SETTINGS.Has("DashboardHideOnHover") && SETTINGS["DashboardHideOnHover"]) {
             CoordMode "Mouse", "Screen"
             MouseMove A_ScreenWidth - 5, A_ScreenHeight - 5, 0
-            Sleep 100
+            STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
+            Sleep(100)
         }
     } catch {
-        ; تجاهل أي أخطاء غير متوقعة هنا
     }
 }
 
@@ -192,12 +195,10 @@ ActivityMonitorTimer(*) {
     static lastMouseX := 0, lastMouseY := 0
     static lastIdlePhysical := A_TimeIdlePhysical
 
-    ; تحقّق من الخمول الحقيقي المدموج
     idlePhysical := A_TimeIdlePhysical
     idleSinceInternal := A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount)
     idleCombined := Min(idlePhysical, idleSinceInternal)
 
-    ; قراءة موقع الماوس ومقارنة الحركة
     local mx := 0, my := 0
     MouseGetPos &mx, &my
     dx := Abs(mx - lastMouseX)
@@ -205,26 +206,27 @@ ActivityMonitorTimer(*) {
     moveThr := SETTINGS.Has("ActivityMoveThresholdPx") ? SETTINGS["ActivityMoveThresholdPx"] : 2
     moved := (dx >= moveThr || dy >= moveThr)
 
-    ; تحديد نوع النشاط
     evType := "none"
     if (moved) {
-        evType := "mouse"
+        ; تجاهل حركة الماوس الاصطناعية لفترة قصيرة بعد أفعال السكربت
+        if (STATE.Has("synthInputUntil") && A_TickCount < STATE["synthInputUntil"]) {
+            evType := "none"
+        } else {
+            evType := "mouse"
+        }
     } else {
         keyResetMs := SETTINGS.Has("ActivityKeyboardResetMs") ? SETTINGS["ActivityKeyboardResetMs"] : 120
         if (idlePhysical < keyResetMs && lastIdlePhysical >= keyResetMs * 4) {
-            ; يعتبر كيبورد عندما ينخفض الـ idle فجأة بدون حركة ماوس
             evType := "keyboard"
         }
     }
 
-    ; بوابة خمول قبل قبول الحدث (يقلل الفالس)
     gateMs := SETTINGS.Has("ActivityIdleGateMs") ? SETTINGS["ActivityIdleGateMs"] : 3000
     wasIdleLong := (lastIdlePhysical >= gateMs)
 
     if (evType != "none") {
-        ; سجّل نوع النشاط دومًا، لكن لا تحدّث lastUserActivity إلا إذا سبقها خمول كافي
         STATE["lastActivityType"] := evType
-        if (wasIdleLong || moved) {
+        if (wasIdleLong || evType = "mouse") {
             STATE["lastUserActivity"] := A_TickCount
             if (SETTINGS.Has("ActivityDebug") && SETTINGS["ActivityDebug"]) {
                 Info("Activity: " . evType . " (dx=" . dx . ", dy=" . dy . ", idle=" . idlePhysical . ")")
@@ -232,7 +234,6 @@ ActivityMonitorTimer(*) {
         }
     }
 
-    ; تخزين القيم للإطار القادم
     lastMouseX := mx
     lastMouseY := my
     lastIdlePhysical := idlePhysical
@@ -257,6 +258,7 @@ StayOnlineTimer(*) {
         STATE["lastStayOnlineTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
         Info("Stay Online click performed - timestamp updated.")
         STATE["actionBusyUntil"] := A_TickCount + 3000
+        STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
     } else {
         stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
         cx := (stayOnlineArea["x1"] + stayOnlineArea["x2"]) // 2
@@ -267,12 +269,14 @@ StayOnlineTimer(*) {
         STATE["lastStayOnlineClickTime"] := A_TickCount
         STATE["lastStayOnlineTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
         STATE["actionBusyUntil"] := A_TickCount + 3000
+        STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
         Info("Stay Online: button not detected, performed fallback center click.")
         Sleep 1000
         if (ClickStayOnlineButton()) {
             STATE["lastStayOnlineClickTime"] := A_TickCount
             STATE["lastStayOnlineTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
             STATE["actionBusyUntil"] := A_TickCount + 3000
+            STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
         }
     }
 }
@@ -307,6 +311,7 @@ RefreshTimer(*) {
     if (stayVisible) {
         Info("Stay Online button found before refresh - clicking it first")
         Click(sX, sY)
+        STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
         Sleep(1000)
         stillVisible := (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0)
             ? ImageListSearch(&sX, &sY, SETTINGS["StayOnlineImageList"], stayOnlineArea)
@@ -319,10 +324,12 @@ RefreshTimer(*) {
 
     Info("Refresh proceeding: idleCombined=" . idleCombined . " >= thr=" . SETTINGS["UserIdleThreshold"] . ".")
     Click(SETTINGS["RefreshX"], SETTINGS["RefreshY"])
+    STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
     CoordMode "Mouse", "Screen"
     tx := Min(A_ScreenWidth - 5, SETTINGS["RefreshX"] + 150)
     ty := Min(A_ScreenHeight - 5, SETTINGS["RefreshY"] + 150)
     MouseMove tx, ty, 0
+    STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
     Info("Refresh performed - Time-based")
     STATE["lastRefreshTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
     delayMs := SETTINGS.Has("PostRefreshDelayMs") ? SETTINGS["PostRefreshDelayMs"] : 2500
@@ -505,9 +512,11 @@ ClickStayOnlineButton() {
                 BlockInput true
                 try {
                     MouseMove clickX, clickY
-                    Sleep 100
+                    STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
+                    Sleep(100)
                     Click
-                    Sleep 500
+                    STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
+                    Sleep(500)
                 } finally {
                     BlockInput false
                 }

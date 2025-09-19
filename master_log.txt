@@ -323,3 +323,20 @@ Line: 82
 [20250919002929] [INFO] Master script loaded and initialized successfully.
 [20250919003029] [INFO] Front Line window not found. Attempting to restart app.
 [20250919003029] [INFO] Front Line launched from shortcut.
+[20250919003129] [INFO] Front Line window not found. Attempting to restart app.
+[20250919003129] [INFO] Front Line launched from shortcut.
+[20250919003229] [INFO] Front Line window not found. Attempting to restart app.
+[20250919003229] [INFO] Front Line launched from shortcut.
+[20250919003329] [INFO] Front Line window not found. Attempting to restart app.
+[20250919003329] [INFO] Front Line launched from shortcut.
+[20250919003429] [INFO] Front Line window not found. Attempting to restart app.
+[20250919003429] [INFO] Front Line launched from shortcut.
+[20250919003529] [INFO] Front Line window not found. Attempting to restart app.
+[20250919003529] [INFO] Front Line launched from shortcut.
+[20250919003629] [INFO] Front Line window not found. Attempting to restart app.
+[20250919003629] [INFO] Front Line launched from shortcut.
+[20250919003729] [INFO] Front Line window not found. Attempting to restart app.
+[20250919003729] [INFO] Front Line launched from shortcut.
+[20250919003829] [INFO] Front Line window not found. Attempting to restart app.
+[20250919003829] [INFO] Front Line launched from shortcut.
+[20250919003906] [INFO] Telegram Rich Message SUCCESS: 📊 Session Report (on exit)
