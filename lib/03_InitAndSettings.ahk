@@ -54,7 +54,7 @@ InitializeScript() {
     SetTimer(StayOnlineTimer, SETTINGS["StayOnlineInterval"]) 
     SetTimer(RefreshTimer, SETTINGS["RefreshInterval"]) 
     SetTimer(MonitorTargetTimer, SETTINGS["MainLoopInterval"]) 
-    SetTimer(UpdateDashboardTimer, 1000)
+    SetTimer(UpdateDashboardTimer, SETTINGS.Has("DashboardUpdateIntervalMs") ? SETTINGS["DashboardUpdateIntervalMs"] : 1000)
     ; --- جديد: راقب نشاط المستخدم لتحديث lastUserActivity بالوقت الحقيقي ---
     SetTimer(ActivityMonitorTimer, SETTINGS.Has("ActivityPollIntervalMs") ? SETTINGS["ActivityPollIntervalMs"] : 150)
     Info("Timers initialized. Running.")
@@ -220,6 +220,9 @@ LoadSettings() {
         SETTINGS["DashboardX"] := IniRead(iniFile, "Dashboard", "X", 10)
         SETTINGS["DashboardY"] := IniRead(iniFile, "Dashboard", "Y", 120)
         SETTINGS["DashboardHideOnHover"] := IniRead(iniFile, "Dashboard", "HideOnHover", 0)
+        SETTINGS["DashboardUpdateIntervalMs"] := IniRead(iniFile, "Dashboard", "UpdateIntervalMs", 1500)
+        SETTINGS["DashboardX2"] := IniRead(iniFile, "Dashboard", "X2", SETTINGS["DashboardX"]) 
+        SETTINGS["DashboardY2"] := IniRead(iniFile, "Dashboard", "Y2", SETTINGS["DashboardY"])
 
         ; --- حالات مُصرح بها لمراقبة الكلمة (CSV) ---
         local statusesCsv := IniRead(iniFile, "WordMonitor", "AllowedStatuses", "Online")

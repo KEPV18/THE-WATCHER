@@ -452,7 +452,7 @@ MonitorTargetTimer(*) {
                     "Cause", cause,
                     "Status", STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "N/A",
                     "User Idle", (Floor(idleCombined / 60000)) . "m",
-                    "Battery", GetBatteryPercent() . "%"
+                    "Battery", (STATE.Has("batteryPercent") ? STATE["batteryPercent"] : GetBatteryPercent()) . "%"
                 )
                 SendRichTelegramNotification("🚨 ALARM: Target Word Missing!", details)
                 SetTimer(AlarmBeep, 300)
@@ -468,7 +468,7 @@ MonitorTargetTimer(*) {
                 "Cause", "TargetMissingNoStayOnline",
                 "Status", STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "N/A",
                 "User Idle", (Floor(idleCombined / 60000)) . "m",
-                "Battery", GetBatteryPercent() . "%"
+                "Battery", (STATE.Has("batteryPercent") ? STATE["batteryPercent"] : GetBatteryPercent()) . "%"
             )
             SendRichTelegramNotification("🚨 ALARM: Target Word Missing!", details)
             SetTimer(AlarmBeep, 300)
@@ -728,6 +728,10 @@ BatteryCheckTimer(*) {
     thr := SETTINGS.Has("BatteryAlertThreshold") ? SETTINGS["BatteryAlertThreshold"] : 20
     cdMs := SETTINGS.Has("BatteryAlertCooldown") ? SETTINGS["BatteryAlertCooldown"] : 1800000
     pct := GetBatteryPercent()
+    
+    ; خزنها للاستخدام في الداشبورد لتقليل الاستعلامات المتكررة
+    STATE["batteryPercent"] := pct
+    STATE["batteryLastCheckTick"] := A_TickCount
     
     if (pct >= 0 && pct <= thr) {
         now := A_TickCount

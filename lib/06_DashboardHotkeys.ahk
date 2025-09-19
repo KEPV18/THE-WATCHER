@@ -13,21 +13,17 @@ UpdateDashboard() {
         return
     }
 
-    battery := GetBatteryPercent()
-    ; لا نستخدم أي رموز أو تزيينات للبطارية، نسبة فقط
+    ; --- حساب القيم مرة واحدة ---
+    battery := (STATE.Has("batteryPercent") ? STATE["batteryPercent"] : GetBatteryPercent())
     batteryPercentText := (battery = -1) ? "N/A" : battery . "%"
-    ; أزلنا رمز التحذير ⚠ للحفاظ على بساطة العرض
-    ; if (battery != -1 && battery <= 20)
-    ;     batteryPercentText := "⚠ " . batteryPercentText
 
-    ; خمول فعلي من النظام + آخر نشاط داخلي
     idlePhysical := A_TimeIdlePhysical
     keyboardOnly := (IsObject(SETTINGS) && SETTINGS.Has("ActivityKeyboardOnly") && SETTINGS["ActivityKeyboardOnly"]) ? true : false
     idleCombined := keyboardOnly 
         ? (A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount)) 
         : Min(idlePhysical, A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount))
     idleText := (idleCombined // 60000) . "m " . Mod(idleCombined // 1000, 60) . "s"
-    
+
     alarmStatus := "N/A"
     if STATE.Has("isAlarmPlaying") {
         if STATE["isAlarmPlaying"]
@@ -38,40 +34,23 @@ UpdateDashboard() {
             alarmStatus := "OFF"
     }
 
-    ; --- مؤشر الإنترنت ---
     netLine := "Network: N/A"
     if (STATE.Has("netOnline")) {
-    if (STATE["netOnline"]) {
-    netLine := "Network: ✅ Online"
-    } else {
-    offlineElapsed := A_TickCount - (STATE.Has("netLastChangeTick") ? STATE["netLastChangeTick"] : A_TickCount)
-    netLine := "Network: ❌ Offline (" . (offlineElapsed // 60000) . "m " . Mod(offlineElapsed // 1000, 60) . "s)"
-    }
+        if (STATE["netOnline"]) {
+            netLine := "Network: ✅ Online"
+        } else {
+            offlineElapsed := A_TickCount - (STATE.Has("netLastChangeTick") ? STATE["netLastChangeTick"] : A_TickCount)
+            netLine := "Network: ❌ Offline (" . (offlineElapsed // 60000) . "m " . Mod(offlineElapsed // 1000, 60) . "s)"
+        }
     }
 
-    ; --- آخر حالة تيليجرام (تم إخفاؤها من العرض حسب طلبك) ---
-    ; lastTG := STATE.Has("lastTelegramStatus") ? STATE["lastTelegramStatus"] : "N/A"
-
-    ; --- الطوابع الزمنية: آخر تشيك/ريفريش/ستاي أونلاين ---
     lastCheck := STATE.Has("lastStatusCheckTimestamp") ? STATE["lastStatusCheckTimestamp"] : "Never"
     lastRefresh := STATE.Has("lastRefreshTimestamp") ? STATE["lastRefreshTimestamp"] : "Never"
     lastStay := STATE.Has("lastStayOnlineTimestamp") ? STATE["lastStayOnlineTimestamp"] : "Never"
 
-    ; --- وضع العرض: مضغوط Alt أو مُثبّت عبر Ctrl+Alt+D ---
     isExpanded := GetKeyState("Alt", "P") || (STATE.Has("dashboardExpanded") ? STATE["dashboardExpanded"] : false)
 
-    ; لو موسّع: لا نعرض مربعات البطارية، فقط النسبة
     batteryText := batteryPercentText
-    if (isExpanded && battery >= 0) {
-        ; إزالة رسم المربعات والرموز
-        batteryText := batteryPercentText
-    }
-    ; إزالة بناء البلوكات تمامًا
-    ; batteryBlocks := ""
-    ; filled := Floor(battery / 10)
-    ; Loop 10
-    ;     batteryBlocks .= (A_Index <= filled) ? "■" : "□"
-    ; batteryText := "🔋 [" . batteryBlocks . "] " . batteryPercentText
 
     statusText := (STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "N/A")
     alarmText := alarmStatus
@@ -80,11 +59,9 @@ UpdateDashboard() {
         netShort := STATE["netOnline"] ? "Network ✅" : "Network ❌"
 
     if !isExpanded {
-        ; نسخة مضغوطة: سطران فقط + تلميح للاختصار (بدون عرض TG)
         text := "S: " . statusText . " | " . netShort . " | Battery " . batteryPercentText . " | Idle " . idleText . "`n"
-         text .= "(Ctrl+Alt+D للتفاصيل)"
+        text .= "(Ctrl+Alt+D للتفاصيل)"
     } else {
-        ; نسخة موسّعة بكامل التفاصيل (بدون عرض Last TG)
         text := "The Watcher by A.k`n"
         text .= "Status: " . statusText . " | Alarm: " . alarmText . "`n"
         text .= netLine . "`n"
@@ -93,16 +70,16 @@ UpdateDashboard() {
         text .= "Last Stay Online: " . lastStay
     }
 
-    ; كاش لتقليل الفليكر - لا يمنع إعادة الإظهار بعد الإخفاء المؤقت
-    static prevText := ""
-    static wasHidden := false
+    ; --- عرض على شاشتين باستخدام TooltipId مختلف (ضمن 1..20) ---
+    ShowTooltipForScreen(text, 19, SETTINGS.Has("DashboardX") ? SETTINGS["DashboardX"] : 10, SETTINGS.Has("DashboardY") ? SETTINGS["DashboardY"] : 120)
+    ShowTooltipForScreen(text, 20, SETTINGS.Has("DashboardX2") ? SETTINGS["DashboardX2"] : (SETTINGS.Has("DashboardX") ? SETTINGS["DashboardX"] : 10), SETTINGS.Has("DashboardY2") ? SETTINGS["DashboardY2"] : (SETTINGS.Has("DashboardY") ? SETTINGS["DashboardY"] : 120))
+}
 
-    tooltipId := 20
-    tooltipX := (IsObject(SETTINGS) && SETTINGS.Has("DashboardX")) ? SETTINGS["DashboardX"] : 10
-    tooltipY := (IsObject(SETTINGS) && SETTINGS.Has("DashboardY")) ? SETTINGS["DashboardY"] : 120
-
-    ; تحسين الإخفاء: عند وقوف الماوس داخل منطقة التولتيب، أخفِ وتعطيل العرض 1.5 ثانية لمنع الوميض/التهنيج
-    static hideUntilTick := 0
+ShowTooltipForScreen(text, tooltipId, tooltipX, tooltipY) {
+    global SETTINGS
+    static prevTextMap := Map()
+    static hideUntilMap := Map()
+    static wasHiddenMap := Map()
 
     lines := StrSplit(text, "`n")
     maxLen := 0
@@ -114,9 +91,10 @@ UpdateDashboard() {
     widthPx := Min(650, Max(200, maxLen * 7))
     heightPx := Max(18, lines.Length * 18)
 
+    hideUntilTick := hideUntilMap.Has(tooltipId) ? hideUntilMap[tooltipId] : 0
     if (A_TickCount < hideUntilTick) {
         ToolTip(, , , tooltipId)
-        wasHidden := true
+        wasHiddenMap[tooltipId] := true
         return
     }
 
@@ -124,19 +102,20 @@ UpdateDashboard() {
         MouseGetPos &mx, &my
         if (mx >= tooltipX && mx <= tooltipX + widthPx && my >= tooltipY && my <= tooltipY + heightPx) {
             ToolTip(, , , tooltipId)
-            hideUntilTick := A_TickCount + 1500
-            wasHidden := true
+            hideUntilMap[tooltipId] := A_TickCount + 1500
+            wasHiddenMap[tooltipId] := true
             return
         }
     }
 
-    ; لا نتخطى إعادة الإظهار إذا كان النص لم يتغير لكن كان مخفيًا مؤقتًا
+    prevText := prevTextMap.Has(tooltipId) ? prevTextMap[tooltipId] : ""
+    wasHidden := wasHiddenMap.Has(tooltipId) ? wasHiddenMap[tooltipId] : false
     if (text = prevText && !wasHidden)
         return
 
-    prevText := text
+    prevTextMap[tooltipId] := text
     ToolTip(text, tooltipX, tooltipY, tooltipId)
-    wasHidden := false
+    wasHiddenMap[tooltipId] := false
 }
 
 ; --- Hotkeys ---
