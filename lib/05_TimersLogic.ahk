@@ -197,7 +197,8 @@ ActivityMonitorTimer(*) {
 
     idlePhysical := A_TimeIdlePhysical
     idleSinceInternal := A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount)
-    idleCombined := Min(idlePhysical, idleSinceInternal)
+    keyboardOnly := (SETTINGS.Has("ActivityKeyboardOnly") && SETTINGS["ActivityKeyboardOnly"]) ? true : false
+    idleCombined := keyboardOnly ? idleSinceInternal : Min(idlePhysical, idleSinceInternal)
 
     local mx := 0, my := 0
     MouseGetPos &mx, &my
@@ -207,7 +208,7 @@ ActivityMonitorTimer(*) {
     moved := (dx >= moveThr || dy >= moveThr)
 
     evType := "none"
-    if (moved) {
+    if (!keyboardOnly && moved) {
         ; تجاهل حركة الماوس الاصطناعية لفترة قصيرة بعد أفعال السكربت
         if (STATE.Has("synthInputUntil") && A_TickCount < STATE["synthInputUntil"]) {
             evType := "none"
@@ -226,7 +227,7 @@ ActivityMonitorTimer(*) {
 
     if (evType != "none") {
         STATE["lastActivityType"] := evType
-        if (wasIdleLong || evType = "mouse") {
+        if (wasIdleLong || evType = "mouse" || evType = "keyboard") {
             STATE["lastUserActivity"] := A_TickCount
             if (SETTINGS.Has("ActivityDebug") && SETTINGS["ActivityDebug"]) {
                 Info("Activity: " . evType . " (dx=" . dx . ", dy=" . dy . ", idle=" . idlePhysical . ")")
@@ -246,7 +247,8 @@ StayOnlineTimer(*) {
         return
     idlePhysical := A_TimeIdlePhysical
     idleSinceInternal := A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount)
-    idleCombined := Min(idlePhysical, idleSinceInternal)
+    keyboardOnly := (SETTINGS.Has("ActivityKeyboardOnly") && SETTINGS["ActivityKeyboardOnly"]) ? true : false
+    idleCombined := keyboardOnly ? idleSinceInternal : Min(idlePhysical, idleSinceInternal)
     if (idleCombined < SETTINGS["UserIdleThreshold"]) ; لا ينفّذ أثناء النشاط الحقيقي
         return
     current := STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "Unknown"
@@ -293,7 +295,8 @@ RefreshTimer(*) {
     }
     idlePhysical := A_TimeIdlePhysical
     idleSinceInternal := A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount)
-    idleCombined := Min(idlePhysical, idleSinceInternal)
+    keyboardOnly := (SETTINGS.Has("ActivityKeyboardOnly") && SETTINGS["ActivityKeyboardOnly"]) ? true : false
+    idleCombined := keyboardOnly ? idleSinceInternal : Min(idlePhysical, idleSinceInternal)
     if (idleCombined < SETTINGS["UserIdleThreshold"]) {
         Info("Refresh skipped: user active (idleCombined=" . idleCombined . ", thr=" . SETTINGS["UserIdleThreshold"] . ").")
         return
@@ -391,7 +394,8 @@ MonitorTargetTimer(*) {
 
         idlePhysical := A_TimeIdlePhysical
         idleSinceInternal := A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount)
-        idleCombined := Min(idlePhysical, idleSinceInternal)
+        keyboardOnly := (SETTINGS.Has("ActivityKeyboardOnly") && SETTINGS["ActivityKeyboardOnly"]) ? true : false
+        idleCombined := keyboardOnly ? idleSinceInternal : Min(idlePhysical, idleSinceInternal)
         idleOk := idleCombined >= SETTINGS["UserIdleThreshold"]
         if !idleOk {
             if (STATE["isAlarmPlaying"]) {

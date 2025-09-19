@@ -232,8 +232,9 @@ LoadSettings() {
         SETTINGS["ActivityPollIntervalMs"] := IniRead(iniFile, "Activity", "PollIntervalMs", 150)
         SETTINGS["ActivityMoveThresholdPx"] := IniRead(iniFile, "Activity", "MoveThresholdPx", 2)
         SETTINGS["ActivityKeyboardResetMs"] := IniRead(iniFile, "Activity", "KeyboardResetMs", 120)
-        SETTINGS["ActivityIdleGateMs"] := IniRead(iniFile, "Activity", "IdleGateMs", 3000)
+        SETTINGS["ActivityIdleGateMs"] := IniRead(iniFile, "Activity", "ActivityIdleGateMs", 3000)
         SETTINGS["ActivitySynthIgnoreMs"] := IniRead(iniFile, "Activity", "SynthIgnoreMs", 2000)
+        SETTINGS["ActivityKeyboardOnly"] := IniRead(iniFile, "Activity", "KeyboardOnly", 0)
         SETTINGS["ActivityDebug"] := IniRead(iniFile, "Activity", "Debug", 0)
     } catch as ex {
         MsgBox("Error reading settings.ini:`n" . ex.Message, "Configuration Error", 4112)

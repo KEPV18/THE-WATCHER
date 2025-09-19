@@ -22,7 +22,10 @@ UpdateDashboard() {
 
     ; خمول فعلي من النظام + آخر نشاط داخلي
     idlePhysical := A_TimeIdlePhysical
-    idleCombined := Min(idlePhysical, A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount))
+    keyboardOnly := (IsObject(SETTINGS) && SETTINGS.Has("ActivityKeyboardOnly") && SETTINGS["ActivityKeyboardOnly"]) ? true : false
+    idleCombined := keyboardOnly 
+        ? (A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount)) 
+        : Min(idlePhysical, A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount))
     idleText := (idleCombined // 60000) . "m " . Mod(idleCombined // 1000, 60) . "s"
     
     alarmStatus := "N/A"
