@@ -209,7 +209,6 @@ ActivityMonitorTimer(*) {
 
     evType := "none"
     if (!keyboardOnly && moved) {
-        ; تجاهل حركة الماوس الاصطناعية لفترة قصيرة بعد أفعال السكربت
         if (STATE.Has("synthInputUntil") && A_TickCount < STATE["synthInputUntil"]) {
             evType := "none"
         } else {
@@ -217,16 +216,18 @@ ActivityMonitorTimer(*) {
         }
     } else {
         keyResetMs := SETTINGS.Has("ActivityKeyboardResetMs") ? SETTINGS["ActivityKeyboardResetMs"] : 120
-        if (idlePhysical < keyResetMs && lastIdlePhysical >= keyResetMs * 4) {
+        ; التقط نشاط الكيبورد عندما يقل A_TimeIdlePhysical بشكل ملحوظ بين دورتين
+        if (idlePhysical < keyResetMs || (lastIdlePhysical - idlePhysical) >= keyResetMs) {
             evType := "keyboard"
         }
     }
 
     gateMs := SETTINGS.Has("ActivityIdleGateMs") ? SETTINGS["ActivityIdleGateMs"] : 3000
-    wasIdleLong := (lastIdlePhysical >= gateMs)
+    wasIdleLong := (lastIdlePhysical >= gateMs) || (idleSinceInternal >= gateMs)
 
     if (evType != "none") {
         STATE["lastActivityType"] := evType
+        ; إعادة ضبط مباشرة إذا كان هناك نشاط، أو كان المستخدم خامل لفترة طويلة ثم تحرك
         if (wasIdleLong || evType = "mouse" || evType = "keyboard") {
             STATE["lastUserActivity"] := A_TickCount
             if (SETTINGS.Has("ActivityDebug") && SETTINGS["ActivityDebug"]) {

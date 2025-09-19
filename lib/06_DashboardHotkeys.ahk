@@ -72,7 +72,28 @@ UpdateDashboard() {
 
     ; --- عرض على شاشتين باستخدام TooltipId مختلف (ضمن 1..20) ---
     ShowTooltipForScreen(text, 19, SETTINGS.Has("DashboardX") ? SETTINGS["DashboardX"] : 10, SETTINGS.Has("DashboardY") ? SETTINGS["DashboardY"] : 120)
-    ShowTooltipForScreen(text, 20, SETTINGS.Has("DashboardX2") ? SETTINGS["DashboardX2"] : (SETTINGS.Has("DashboardX") ? SETTINGS["DashboardX"] : 10), SETTINGS.Has("DashboardY2") ? SETTINGS["DashboardY2"] : (SETTINGS.Has("DashboardY") ? SETTINGS["DashboardY"] : 120))
+
+    ; حساب موضع افتراضي للشاشة الثانية إذا لم تُحدَّد DashboardX2/Y2
+    defX2 := SETTINGS.Has("DashboardX2") ? SETTINGS["DashboardX2"] : ""
+    defY2 := SETTINGS.Has("DashboardY2") ? SETTINGS["DashboardY2"] : ""
+    if (!defX2 || !defY2) {
+        try {
+            if (MonitorGetCount() >= 2) {
+                MonitorGet(2, &L, &T, &R, &B)
+                if (!defX2)
+                    defX2 := L + 10
+                if (!defY2)
+                    defY2 := T + 120
+            }
+        } catch {
+        }
+    }
+    if (!defX2)
+        defX2 := (SETTINGS.Has("DashboardX") ? SETTINGS["DashboardX"] : 10)
+    if (!defY2)
+        defY2 := (SETTINGS.Has("DashboardY") ? SETTINGS["DashboardY"] : 120)
+
+    ShowTooltipForScreen(text, 20, defX2, defY2)
 }
 
 ShowTooltipForScreen(text, tooltipId, tooltipX, tooltipY) {

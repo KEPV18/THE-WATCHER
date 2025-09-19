@@ -55,6 +55,10 @@ InitializeScript() {
     SetTimer(RefreshTimer, SETTINGS["RefreshInterval"]) 
     SetTimer(MonitorTargetTimer, SETTINGS["MainLoopInterval"]) 
     SetTimer(UpdateDashboardTimer, SETTINGS.Has("DashboardUpdateIntervalMs") ? SETTINGS["DashboardUpdateIntervalMs"] : 1000)
+    
+    ; أول فحص حالة بعد 10 ثواني من بدء السكربت (تشغيل أحادي)
+    SetTimer(StatusCheckTimer, -10000)
+
     ; --- جديد: راقب نشاط المستخدم لتحديث lastUserActivity بالوقت الحقيقي ---
     SetTimer(ActivityMonitorTimer, SETTINGS.Has("ActivityPollIntervalMs") ? SETTINGS["ActivityPollIntervalMs"] : 150)
     Info("Timers initialized. Running.")
