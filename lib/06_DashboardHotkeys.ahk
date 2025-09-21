@@ -58,50 +58,138 @@ UpdateDashboard() {
     if (STATE.Has("netOnline"))
         netShort := STATE["netOnline"] ? "Network ✅" : "Network ❌"
 
+    ; إضافة معلومات الوضع الذكي
+    monitoringStatus := STATE.Has("monitoringActive") && STATE["monitoringActive"] ? "Active" : "Waiting"
+    intelligentMode := STATE.Has("intelligentMode") && STATE["intelligentMode"] ? "ON" : "OFF"
+
     if !isExpanded {
         text := "S: " . statusText . " | " . netShort . " | Battery " . batteryPercentText . " | Idle " . idleText . "`n"
-        text .= "(Ctrl+Alt+D للتفاصيل)"
+        text .= "Monitor: " . monitoringStatus . " | Smart: " . intelligentMode . " | (Ctrl+Alt+D للتفاصيل)"
     } else {
-        text := "The Watcher by A.k`n"
+        text := "The Watcher by A.k (Smart Mode)`n"
         text .= "Status: " . statusText . " | Alarm: " . alarmText . "`n"
         text .= netLine . "`n"
         text .= "Battery: " . batteryText . " | User Idle: " . idleText . "`n"
+        text .= "Monitoring: " . monitoringStatus . " | Intelligent Mode: " . intelligentMode . "`n"
         text .= "Last Check: " . lastCheck . " | Last Refresh: " . lastRefresh . "`n"
         text .= "Last Stay Online: " . lastStay
     }
 
-    ; --- عرض على شاشتين باستخدام TooltipId مختلف (ضمن 1..20) ---
-    ShowTooltipForScreen(text, 19, SETTINGS.Has("DashboardX") ? SETTINGS["DashboardX"] : 10, SETTINGS.Has("DashboardY") ? SETTINGS["DashboardY"] : 120)
+    ; --- النظام الذكي للداشبورد: تقسيم الشاشة وتجنب الماوس ---
+    MouseGetPos &mx, &my
+    
+    ; تحديث موقع الماوس في الحالة
+    STATE["mouseLastX"] := mx
+    STATE["mouseLastY"] := my
+    
+    ; احسب أبعاد التولتيب
+    lines := StrSplit(text, "`n")
+    maxLen := 0
+    for _, ln in lines {
+        l := StrLen(ln)
+        if (l > maxLen)
+            maxLen := l
+    }
+    widthPx := Min(650, Max(200, maxLen * 7))
+    heightPx := Max(18, lines.Length * 18)
+    margin := 10
 
-    ; حساب موضع افتراضي للشاشة الثانية إذا لم تُحدَّد DashboardX2/Y2
-    defX2 := SETTINGS.Has("DashboardX2") ? SETTINGS["DashboardX2"] : ""
-    defY2 := SETTINGS.Has("DashboardY2") ? SETTINGS["DashboardY2"] : ""
-    if (!defX2 || !defY2) {
+    ; --- النظام الذكي: تحديد موقع الداشبورد بناءً على موقع الماوس ---
+    SmartDashboardPositioning(text, mx, my, widthPx, heightPx, margin)
+}
+
+; دالة جديدة للتحكم الذكي في موقع الداشبورد
+SmartDashboardPositioning(text, mouseX, mouseY, width, height, margin) {
+    global STATE, SETTINGS
+    
+    ; فحص إذا كان النظام الذكي مفعل
+    if (!SETTINGS.Has("SmartDashboard") || !SETTINGS["SmartDashboard"]) {
+        ; استخدام النظام القديم
+        ShowTooltipForScreen(text, 19, SETTINGS.Has("DashboardX") ? SETTINGS["DashboardX"] : 10, SETTINGS.Has("DashboardY") ? SETTINGS["DashboardY"] : 120)
+        return
+    }
+    
+    ; معالجة كل شاشة على حدة
+    monitorCount := MonitorGetCount()
+    
+    Loop monitorCount {
+        monitorIndex := A_Index
+        
         try {
-            if (MonitorGetCount() >= 2) {
-                MonitorGet(2, &L, &T, &R, &B)
-                if (!defX2)
-                    defX2 := L + 10
-                if (!defY2)
-                    defY2 := T + 120
+            MonitorGet(monitorIndex, &left, &top, &right, &bottom)
+            
+            ; فحص إذا كان الماوس في هذه الشاشة
+            if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
+                ; تقسيم الشاشة إلى نصفين
+                screenWidth := right - left
+                screenHeight := bottom - top
+                midX := left + (screenWidth // 2)
+                
+                ; تحديد موقع الداشبورد بناءً على موقع الماوس
+                local dashX, dashY
+                
+                if (mouseX < midX) {
+                    ; الماوس في النصف الأيسر، ضع الداشبورد في النصف الأيمن
+                    dashX := midX + margin
+                    STATE["dashboardPosition"] := "right"
+                } else {
+                    ; الماوس في النصف الأيمن، ضع الداشبورد في النصف الأيسر
+                    dashX := left + margin
+                    STATE["dashboardPosition"] := "left"
+                }
+                
+                ; تحديد الموقع العمودي (تجنب الحواف)
+                dashY := top + 120
+                if (dashY + height > bottom - margin) {
+                    dashY := Max(top + margin, bottom - margin - height)
+                }
+                
+                ; التأكد من أن الداشبورد لا يخرج من حدود الشاشة
+                if (dashX + width > right - margin) {
+                    dashX := right - margin - width
+                }
+                
+                ; عرض الداشبورد في الموقع المحسوب
+                ShowTooltipForScreen(text, 18 + monitorIndex, dashX, dashY)
+                
+                ; حفظ الموقع الجديد للاستخدام المستقبلي
+                if (monitorIndex == 1) {
+                    STATE["dashboardX1"] := dashX
+                    STATE["dashboardY1"] := dashY
+                } else if (monitorIndex == 2) {
+                    STATE["dashboardX2"] := dashX
+                    STATE["dashboardY2"] := dashY
+                }
+                
+            } else {
+                ; الماوس ليس في هذه الشاشة، استخدم الموقع الافتراضي أو المحفوظ
+                local defaultX, defaultY
+                
+                if (monitorIndex == 1) {
+                    defaultX := STATE.Has("dashboardX1") ? STATE["dashboardX1"] : (SETTINGS.Has("DashboardX") ? SETTINGS["DashboardX"] : left + 10)
+                    defaultY := STATE.Has("dashboardY1") ? STATE["dashboardY1"] : (SETTINGS.Has("DashboardY") ? SETTINGS["DashboardY"] : top + 120)
+                } else if (monitorIndex == 2) {
+                    defaultX := STATE.Has("dashboardX2") ? STATE["dashboardX2"] : (SETTINGS.Has("DashboardX2") ? SETTINGS["DashboardX2"] : left + 10)
+                    defaultY := STATE.Has("dashboardY2") ? STATE["dashboardY2"] : (SETTINGS.Has("DashboardY2") ? SETTINGS["DashboardY2"] : top + 120)
+                } else {
+                    defaultX := left + 10
+                    defaultY := top + 120
+                }
+                
+                ShowTooltipForScreen(text, 18 + monitorIndex, defaultX, defaultY)
             }
-        } catch {
+            
+        } catch as e {
+            ; في حالة حدوث خطأ، استخدم الموقع الافتراضي
+            local fallbackX := (monitorIndex == 1) ? 10 : 1930
+            local fallbackY := 120
+            ShowTooltipForScreen(text, 18 + monitorIndex, fallbackX, fallbackY)
         }
     }
-    if (!defX2)
-        defX2 := (SETTINGS.Has("DashboardX") ? SETTINGS["DashboardX"] : 10)
-    if (!defY2)
-        defY2 := (SETTINGS.Has("DashboardY") ? SETTINGS["DashboardY"] : 120)
-
-    ShowTooltipForScreen(text, 20, defX2, defY2)
 }
 
 ShowTooltipForScreen(text, tooltipId, tooltipX, tooltipY) {
-    global SETTINGS
-    static prevTextMap := Map()
-    static hideUntilMap := Map()
-    static wasHiddenMap := Map()
-
+    ; لا تُخفِ الداشبورد عند المرور عليها، وأعد رسمها حتى لو لم يتغير النص لتحديث الموضع
     lines := StrSplit(text, "`n")
     maxLen := 0
     for _, ln in lines {
@@ -112,31 +200,8 @@ ShowTooltipForScreen(text, tooltipId, tooltipX, tooltipY) {
     widthPx := Min(650, Max(200, maxLen * 7))
     heightPx := Max(18, lines.Length * 18)
 
-    hideUntilTick := hideUntilMap.Has(tooltipId) ? hideUntilMap[tooltipId] : 0
-    if (A_TickCount < hideUntilTick) {
-        ToolTip(, , , tooltipId)
-        wasHiddenMap[tooltipId] := true
-        return
-    }
-
-    if (IsObject(SETTINGS) && SETTINGS.Has("DashboardHideOnHover") && SETTINGS["DashboardHideOnHover"]) {
-        MouseGetPos &mx, &my
-        if (mx >= tooltipX && mx <= tooltipX + widthPx && my >= tooltipY && my <= tooltipY + heightPx) {
-            ToolTip(, , , tooltipId)
-            hideUntilMap[tooltipId] := A_TickCount + 1500
-            wasHiddenMap[tooltipId] := true
-            return
-        }
-    }
-
-    prevText := prevTextMap.Has(tooltipId) ? prevTextMap[tooltipId] : ""
-    wasHidden := wasHiddenMap.Has(tooltipId) ? wasHiddenMap[tooltipId] : false
-    if (text = prevText && !wasHidden)
-        return
-
-    prevTextMap[tooltipId] := text
+    ; عرض دائم بدون منطق الإخفاء/الذاكرة السابقة
     ToolTip(text, tooltipX, tooltipY, tooltipId)
-    wasHiddenMap[tooltipId] := false
 }
 
 ; --- Hotkeys ---

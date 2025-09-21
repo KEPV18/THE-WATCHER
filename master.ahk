@@ -2,6 +2,20 @@
 ; MASTER DASHBOARD - AHK v2 (v1.1 - Combined Approach)
 ; ============================================================
 
+#Requires AutoHotkey v2.0
+#SingleInstance Force
+
+; --- Load all modules in the correct, logical order ---
+#Include lib\01_CoreSettings.ahk
+#Include lib\02_Logging.ahk
+#Include lib\07_GDIPlus.ahk           ; GDI+ library
+#Include lib\04_Helpers.ahk           ; Helper functions (including Telegram)
+#Include lib\08_IntelligentSystem.ahk ; Intelligent coordinate detection and smart monitoring
+#Include lib\09_ProfileSystem.ahk     ; Multi-profile system for different screen configurations
+#Include lib\03_InitAndSettings.ahk   ; Initialization functions that use helpers
+#Include lib\05_TimersLogic.ahk       ; Business logic
+#Include lib\06_DashboardHotkeys.ahk  ; UI and Hotkeys
+
 ; --- Bootstrap Log: A simple log to confirm the script tried to start ---
 try {
     FileAppend("=== BOOTSTRAP START: " . A_Now . " ====`r`n", A_ScriptDir "\last_error.log", "UTF-8")
@@ -10,19 +24,6 @@ try {
 
 ; --- Global Error Handling: Catches runtime errors and sends detailed reports ---
 try {
-    ; --- Main Execution Block ---
-    #Requires AutoHotkey v2.0
-    #SingleInstance Force
-
-    ; --- Load all modules in the correct, logical order ---
-    #Include lib\01_CoreSettings.ahk
-    #Include lib\02_Logging.ahk
-    #Include lib\07_GDIPlus.ahk           ; GDI+ library
-    #Include lib\04_Helpers.ahk           ; Helper functions (including Telegram)
-    #Include lib\03_InitAndSettings.ahk   ; Initialization functions that use helpers
-    #Include lib\05_TimersLogic.ahk       ; Business logic
-    #Include lib\06_DashboardHotkeys.ahk  ; UI and Hotkeys
-
     ; --- Pre-flight Check ---
     if !FileExist(iniFile) {
         MsgBox("CRITICAL ERROR: settings.ini file not found! The script cannot start.", "Configuration Error", 4112)

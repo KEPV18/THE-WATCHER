@@ -7,11 +7,16 @@ InitializeScript() {
     
     ; --- Load all settings from the .ini file ---
     LoadSettings()
-    ; فرض القيم المطلوبة إلى دقيقة واحدة كما طُلب (بدون التأثير على زر Stay Online)
-    SETTINGS["StatusCheckInterval"] := 60000       ; Last Check كل دقيقة
-    SETTINGS["RefreshInterval"] := 60000           ; Last Refresh كل دقيقة
-    SETTINGS["UserIdleThreshold"] := 60000         ; User Idle Threshold دقيقة واحدة
+    ; فرض القيم المطلوبة: فحص الحالة كل 5 ثوانٍ بعد بوابة الخمول، ورفع عتبة الخمول إلى دقيقتين
+    SETTINGS["StatusCheckInterval"] := 5000        ; فحص الحالة كل 5 ثوانٍ
+    SETTINGS["RefreshInterval"] := 60000           ; يظل كل دقيقة (نُبقيه كما هو حالياً)
+    SETTINGS["UserIdleThreshold"] := 120000        ; عتبة خمول المستخدم = 120 ثانية
     SETTINGS["StayOnlineInterval"] := 120000       ; تحقق زر Stay Online كل دقيقتين
+    ; إضافة إعدادات جديدة للنظام الذكي
+    SETTINGS["InitialIdleWait"] := 120000          ; انتظار دقيقتين قبل بدء أي مراقبة
+    SETTINGS["SmartDashboard"] := true             ; تفعيل الداشبورد الذكي
+    SETTINGS["IntelligentCoordinates"] := true     ; تفعيل اكتشاف الإحداثيات الذكي
+    SETTINGS["MultiScreenSupport"] := true        ; دعم الشاشات المتعددة
     ; لو حبيت نعدل غيرهم كمان بلغني (زي MainLoopInterval أو غيره)
 
     ; --- Set up the initial state of the script ---
@@ -20,7 +25,10 @@ InitializeScript() {
     ; تحديد تفعيل تيليجرام بناءً على مفاتيئة
     STATE["telegramEnabled"] := (!!BOT_TOKEN && !!CHAT_ID)
     if (!STATE["telegramEnabled"]) {
-        try Warn("Telegram is disabled: missing BOT_TOKEN/CHAT_ID. All Telegram sends will be skipped.")
+        try {
+            Warn("Telegram is disabled: missing BOT_TOKEN/CHAT_ID. All Telegram sends will be skipped.")
+        } catch {
+        }
     } else {
         Info("Telegram is enabled: BOT_TOKEN/CHAT_ID loaded.")
     }
@@ -49,23 +57,24 @@ InitializeScript() {
         STATE["frontlineStatus"] := "Active"
     }
 
-    ; --- Initialize all timers ---
-    SetTimer(StatusCheckTimer, SETTINGS["StatusCheckInterval"])
-    SetTimer(StayOnlineTimer, SETTINGS["StayOnlineInterval"]) 
-    SetTimer(RefreshTimer, SETTINGS["RefreshInterval"]) 
-    SetTimer(MonitorTargetTimer, SETTINGS["MainLoopInterval"]) 
+    ; --- Initialize all timers with initial delay ---
+    ; تأخير بدء المراقبة لمدة دقيقتين
+    Info("Waiting 2 minutes before starting monitoring...")
+    SetTimer(DelayedTimerStart, -SETTINGS["InitialIdleWait"])
+    
+    ; بدء مراقبة النشاط فوراً لتتبع حالة المستخدم
+    SetTimer(ActivityMonitorTimer, SETTINGS.Has("ActivityPollIntervalMs") ? SETTINGS["ActivityPollIntervalMs"] : 150)
+    
+    ; بدء الداشبورد فوراً
     SetTimer(UpdateDashboardTimer, SETTINGS.Has("DashboardUpdateIntervalMs") ? SETTINGS["DashboardUpdateIntervalMs"] : 1000)
     
-    ; أول فحص حالة بعد 10 ثواني من بدء السكربت (تشغيل أحادي)
-    SetTimer(StatusCheckTimer, -10000)
-
-    ; --- جديد: راقب نشاط المستخدم لتحديث lastUserActivity بالوقت الحقيقي ---
-    SetTimer(ActivityMonitorTimer, SETTINGS.Has("ActivityPollIntervalMs") ? SETTINGS["ActivityPollIntervalMs"] : 150)
-    Info("Timers initialized. Running.")
-    ; ScheduleNextDailyReport() ; تم إيقاف التقرير اليومي المجدول بناءً على طلبك
+    Info("Initial timers set. Monitoring will start after 2-minute delay.")
 
     ; استعادة لقطـة الحالة إن وجدت
-    try LoadStateSnapshot(A_ScriptDir "\state_snapshot.ini")
+    try {
+        LoadStateSnapshot(A_ScriptDir "\state_snapshot.ini")
+    } catch {
+    }
 
     ; تايمر فحص الإنترنت حسب الإعدادات
     SetTimer(NetCheckTimer, SETTINGS.Has("NetCheckInterval") ? SETTINGS["NetCheckInterval"] : 1000)
@@ -79,6 +88,53 @@ InitializeScript() {
     ; حفظ عند الخروج
     OnExit(SaveStateOnExit)
     Info("STATE Map has been re-initialized.")
+}
+
+; دالة جديدة لبدء التايمرز بعد التأخير
+DelayedTimerStart(*) {
+    global SETTINGS, STATE
+    Info("2-minute wait completed. Starting monitoring timers...")
+    
+    ; محاولة تحميل البروفايل المناسب تلقائياً
+    try {
+        autoProfile := AutoDetectProfile()
+        if (autoProfile != "") {
+            if (SwitchProfile(autoProfile)) {
+                Info("Auto-loaded profile: " . autoProfile)
+            }
+        } else {
+            ; إنشاء بروفايل تلقائي جديد إذا لم يوجد مطابق
+            newAutoProfile := CreateAutoProfile()
+            if (newAutoProfile != "") {
+                STATE["currentProfile"] := newAutoProfile
+                Info("Created and using new auto-profile: " . newAutoProfile)
+            }
+        }
+    } catch as e {
+        Warn("Auto-profile detection failed: " . e.Message)
+    }
+    
+    ; تشغيل النظام الذكي لاكتشاف الإحداثيات
+    if (SETTINGS.Has("IntelligentCoordinates") && SETTINGS["IntelligentCoordinates"]) {
+        Info("Starting intelligent coordinate detection...")
+        try {
+            IntelligentCoordinateDetection()
+        } catch as e {
+            Warn("Intelligent coordinate detection failed: " . e.Message)
+        }
+    }
+    
+    ; بدء جميع تايمرز المراقبة
+    SetTimer(StatusCheckTimer, SETTINGS["StatusCheckInterval"])
+    SetTimer(StayOnlineTimer, SETTINGS["StayOnlineInterval"]) 
+    SetTimer(RefreshTimer, SETTINGS["RefreshInterval"]) 
+    SetTimer(MonitorTargetTimer, SETTINGS["MainLoopInterval"]) 
+    
+    ; أول فحص حالة بعد 10 ثواني من بدء المراقبة
+    SetTimer(StatusCheckTimer, -10000)
+    
+    STATE["monitoringActive"] := true
+    Info("All monitoring timers are now active.")
 }
 
 InitializeState() {
@@ -102,6 +158,17 @@ InitializeState() {
     STATE["offlineFixAttempts"] := 0
     STATE["screenshotHashes"] := Map()
     STATE["savedScreenshots"] := []
+    
+    ; إضافة متغيرات جديدة للنظام الذكي
+    STATE["monitoringActive"] := false              ; حالة المراقبة النشطة
+    STATE["smartCoordinates"] := Map()              ; إحداثيات ذكية محفوظة
+    STATE["currentProfile"] := "default"           ; البروفايل الحالي
+    STATE["detectedScreens"] := []                 ; الشاشات المكتشفة
+    STATE["dashboardPosition"] := "left"           ; موقع الداشبورد الحالي
+    STATE["mouseLastX"] := 0                       ; آخر موقع للماوس X
+    STATE["mouseLastY"] := 0                       ; آخر موقع للماوس Y
+    STATE["intelligentMode"] := true               ; تفعيل الوضع الذكي
+    
     Info("STATE Map has been re-initialized.")
     ; --- إضافات للتقارير اليومية وتعقب الحالة ---
     STATE["scriptStartTime"] := A_Now
@@ -162,7 +229,14 @@ LoadSettings() {
             SETTINGS["StayOnlineImageList"].Push(SETTINGS["StayOnlineImage"])
         if (SETTINGS.Has("StayOnlineImage2") && FileExist(SETTINGS["StayOnlineImage2"]))
             SETTINGS["StayOnlineImageList"].Push(SETTINGS["StayOnlineImage2"]) 
-
+        
+        ; تحميل عينات إضافية محفوظة تلقائياً لزر Stay Online
+        try {
+            Loop Files, A_ScriptDir "\screenshots\stay_online_samples\*.png", "F" {
+                SETTINGS["StayOnlineImageList"].Push(A_LoopFileFullPath)
+            }
+        } catch {
+        }
         SETTINGS["CoachingImageList"] := []
         if (SETTINGS.Has("CoachingImage") && FileExist(SETTINGS["CoachingImage"]))
             SETTINGS["CoachingImageList"].Push(SETTINGS["CoachingImage"])
@@ -178,7 +252,7 @@ LoadSettings() {
         ; قائمة صور التارجت (واحدة أو اثنتان)
         SETTINGS["TargetImageList"] := []
         if (FileExist(SETTINGS["TargetImage"]))
-            SETTINGS["TargetImageList"].Push(SETTINGS["TargetImage"])
+            SETTINGS["TargetImageList"].Push(SETTINGS["TargetImage"]) 
         if (SETTINGS.Has("TargetImage2") && FileExist(SETTINGS["TargetImage2"]))
             SETTINGS["TargetImageList"].Push(SETTINGS["TargetImage2"])        
         SETTINGS["BeepFrequency"] := IniRead(iniFile, "WordMonitor", "BeepFrequency", 800)
@@ -211,7 +285,23 @@ LoadSettings() {
         SETTINGS["WordMonitorUserIdleReset"] := IniRead(iniFile, "Timings", "WordMonitorUserIdleReset", 60000)
         SETTINGS["ManualPauseDuration"] := IniRead(iniFile, "Timings", "ManualPauseDuration", 180000)
         SETTINGS["PostRefreshDelayMs"] := IniRead(iniFile, "Timings", "PostRefreshDelayMs", 2500)
+        ; New: independent idle threshold for target missing alarm (0 = disabled)
+        SETTINGS["TargetIdleThresholdMs"] := IniRead(iniFile, "Timings", "TargetIdleThresholdMs", 0)
         SETTINGS["ImageSearchTolerance"] := IniRead(iniFile, "Search", "Tolerance", 30)
+        
+        ; ImageSearch multi-scale list (CSV -> Array of positive numbers)
+        local scalesCsv := IniRead(iniFile, "Search", "Scales", "1.0")
+        SETTINGS["ImageSearchScales"] := []
+        for p in StrSplit(scalesCsv, ",") {
+            v := Trim(p)
+            if (v = "")
+                continue
+            s := v + 0
+            if (s > 0)
+                SETTINGS["ImageSearchScales"].Push(s)
+        }
+        if (SETTINGS["ImageSearchScales"].Length = 0)
+            SETTINGS["ImageSearchScales"].Push(1.0)
 
         ; --- إعدادات إضافية ---
         SETTINGS["NetCheckInterval"] := IniRead(iniFile, "Timings", "NetCheckInterval", 1000)
@@ -251,8 +341,11 @@ LoadSettings() {
 
 SaveStateOnExit(*) {
     ; حفظ الحالة عند الخروج + إرسال تقرير الجلسة عند الإنهاء
-    try SaveStateSnapshot(A_ScriptDir "\state_snapshot.ini")
-    
+    try {
+        SaveStateSnapshot(A_ScriptDir "\state_snapshot.ini")
+    } catch {
+    }
+
     ; إرسال تقرير مختصر بالجلسة عند الخروج
     try {
         global STATE
@@ -281,7 +374,10 @@ SaveStateOnExit(*) {
 }
 
 StateSaveTimer(*) {
-    try SaveStateSnapshot(A_ScriptDir "\state_snapshot.ini")
+    try {
+        SaveStateSnapshot(A_ScriptDir "\state_snapshot.ini")
+    } catch {
+    }
 }
 
 SelfTest() {

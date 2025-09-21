@@ -732,3 +732,48 @@ SaveTargetWordScreenshot(label := "target_missing") {
     }
     return result
 }
+
+; ---------------- Save Stay Online Area Screenshot ----------------
+SaveStayOnlineScreenshot(label := "stay_online") {
+    global SETTINGS
+    local result := Map("ok", false, "reason", "unknown error", "file", "")
+
+    x := SETTINGS.Has("StayOnlineAreaTopLeftX") ? SETTINGS["StayOnlineAreaTopLeftX"] : 0
+    y := SETTINGS.Has("StayOnlineAreaTopLeftY") ? SETTINGS["StayOnlineAreaTopLeftY"] : 0
+    brx := SETTINGS.Has("StayOnlineAreaBottomRightX") ? SETTINGS["StayOnlineAreaBottomRightX"] : 0
+    bry := SETTINGS.Has("StayOnlineAreaBottomRightY") ? SETTINGS["StayOnlineAreaBottomRightY"] : 0
+
+    w := brx - x, h := bry - y
+    if (w <= 0 || h <= 0) {
+        result.reason := "invalid area"
+        return result
+    }
+
+    ts := FormatTime(A_Now, "yyyyMMdd_HHmmss")
+    baseDir := A_ScriptDir . "\screenshots\stay online"
+    try {
+        if !DirExist(baseDir)
+            DirCreate(baseDir)
+    }
+    finalName := baseDir . "\" . label . "_" . ts . ".png"
+
+    try {
+        hBmp := CaptureAreaBitmap(x, y, w, h)
+        if (!hBmp) {
+            result.reason := "capture_failed"
+            return result
+        }
+        saved := Gdip_SaveBitmapToFile(hBmp, finalName)
+        if (hBmp)
+            DllCall("DeleteObject", "Ptr", hBmp)
+        if (!saved) {
+            result.reason := "save_failed"
+            return result
+        }
+        result.ok := true
+        result.file := finalName
+        result.reason := "success"
+        try Info("Saved stay-online screenshot: " . finalName)
+    }
+    return result
+}

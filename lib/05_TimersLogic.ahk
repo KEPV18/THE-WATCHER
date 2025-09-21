@@ -3,7 +3,7 @@
 ; ============================================================
 
 ; ============================================================
-; StatusCheckTimer - updated to detect Coaching and use image lists
+; StatusCheckTimer - updated to use intelligent coordinate detection
 ; ============================================================
 StatusCheckTimer(*) {
     global SETTINGS, STATE
@@ -11,6 +11,13 @@ StatusCheckTimer(*) {
         LogError("STATE object lost in StatusCheckTimer.")
         return
     }
+    
+    ; فحص إذا كانت المراقبة نشطة (بعد انتهاء فترة الانتظار دقيقتين)
+    if (!STATE.Has("monitoringActive") || !STATE["monitoringActive"]) {
+        ; Info("StatusCheck skipped - monitoring not yet active")
+        return
+    }
+    
     STATE["lastStatusCheckTime"] := A_TickCount
     STATE["lastStatusCheckTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
     if !WinExist(SETTINGS["FrontlineWinTitle"]) {
@@ -22,25 +29,23 @@ StatusCheckTimer(*) {
         return
     }
     STATE["frontlineStatus"] := "Active"
-    local statusArea := Map("x1", SETTINGS["StatusAreaTopLeftX"], "y1", SETTINGS["StatusAreaTopLeftY"], "x2", SETTINGS["StatusAreaBottomRightX"], "y2", SETTINGS["StatusAreaBottomRightY"])
+    
+    ; استخدام النظام الذكي للبحث عن الحالة
+    local statusArea := GetSmartCoordinates("StatusArea")
     local knownStatusFound := false, foundX, foundY
 
     ; أولًا: تحقق من أي صورة ضمن صور Online المتعددة
     if (SETTINGS.Has("OnlineImageList") && SETTINGS["OnlineImageList"].Length > 0) {
-        for imgPath in SETTINGS["OnlineImageList"] {
-            if (ReliableImageSearch(&foundX, &foundY, imgPath, statusArea)) {
-                if (STATE["onlineStatus"] != "Online") {
-                    Info("Status changed to: Online")
-                    UpdateStatusDurations("Online")
-                    STATE["onlineStatus"] := "Online"
-                    STATE["offlineFixAttempts"] := 0
-                }
-                knownStatusFound := true
-                break
+        searchResult := SmartElementSearch(SETTINGS["OnlineImageList"], "StatusArea")
+        if (searchResult["found"]) {
+            if (STATE["onlineStatus"] != "Online") {
+                Info("Status changed to: Online (Smart Detection)")
+                UpdateStatusDurations("Online")
+                STATE["onlineStatus"] := "Online"
+                STATE["offlineFixAttempts"] := 0
             }
+            knownStatusFound := true
         }
-        if (knownStatusFound)
-            return
     } else {
         if (ReliableImageSearch(&foundX, &foundY, SETTINGS["OnlineImage"], statusArea)) {
             if (STATE["onlineStatus"] != "Online") {
@@ -49,26 +54,25 @@ StatusCheckTimer(*) {
                 STATE["onlineStatus"] := "Online"
                 STATE["offlineFixAttempts"] := 0
             }
-            return
+            knownStatusFound := true
         }
     }
+    
+    if (knownStatusFound)
+        return
 
     ; ثانياً: اكتشاف حالة Coaching (لا نقوم بأي إجراء، فقط تحديث الحالة)
     if (SETTINGS.Has("CoachingImageList") && SETTINGS["CoachingImageList"].Length > 0) {
-        for cimg in SETTINGS["CoachingImageList"] {
-            if (ReliableImageSearch(&foundX, &foundY, cimg, statusArea)) {
-                if (STATE["onlineStatus"] != "Coaching") {
-                    Info("Status changed to: Coaching")
-                    UpdateStatusDurations("Coaching")
-                    STATE["onlineStatus"] := "Coaching"
-                    STATE["offlineFixAttempts"] := 0
-                }
-                knownStatusFound := true
-                break
+        searchResult := SmartElementSearch(SETTINGS["CoachingImageList"], "StatusArea")
+        if (searchResult["found"]) {
+            if (STATE["onlineStatus"] != "Coaching") {
+                Info("Status changed to: Coaching (Smart Detection)")
+                UpdateStatusDurations("Coaching")
+                STATE["onlineStatus"] := "Coaching"
+                STATE["offlineFixAttempts"] := 0
             }
+            knownStatusFound := true
         }
-        if (knownStatusFound)
-            return
     } else if (SETTINGS.Has("CoachingImage") && FileExist(SETTINGS["CoachingImage"])) {
         if (ReliableImageSearch(&foundX, &foundY, SETTINGS["CoachingImage"], statusArea)) {
             if (STATE["onlineStatus"] != "Coaching") {
@@ -77,9 +81,12 @@ StatusCheckTimer(*) {
                 STATE["onlineStatus"] := "Coaching"
                 STATE["offlineFixAttempts"] := 0
             }
-            return
+            knownStatusFound := true
         }
     }
+    
+    if (knownStatusFound)
+        return
 
     ; بقية الحالات الجيدة
     local goodStates := ["WorkOnMyTicket", "Break", "Launch"]
@@ -145,18 +152,122 @@ StatusCheckTimer(*) {
 }
 
 EnsureOnlineStatus() {
-    global SETTINGS
+    global SETTINGS, STATE
     Info("Executing 3-step fix for offline status...")
+    
+    ; إنشاء مجلد لحفظ لقطات الشاشة للضغطات الثلاث
+    screenshotDir := A_ScriptDir "\screenshots\online_fix_steps"
+    if (!DirExist(screenshotDir)) {
+        DirCreate(screenshotDir)
+    }
+    
+    ; الضغطة الأولى
+    Info("Online Fix Step 1: Clicking at (" . SETTINGS["FixStep1X"] . "," . SETTINGS["FixStep1Y"] . ")")
     Click(SETTINGS["FixStep1X"], SETTINGS["FixStep1Y"])
     STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
+    
+    ; حفظ الإحداثيات والتقاط لقطة شاشة
+    try {
+        ; حفظ الإحداثيات
+        coordsFile := screenshotDir "\step1_coordinates.txt"
+        coordsText := "Step 1 Coordinates: X=" . SETTINGS["FixStep1X"] . ", Y=" . SETTINGS["FixStep1Y"] . "`n"
+        coordsText .= "Timestamp: " . FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") . "`n"
+        coordsText .= "Screen Resolution: " . A_ScreenWidth . "x" . A_ScreenHeight . "`n"
+        FileAppend(coordsText, coordsFile, "UTF-8")
+        
+        ; التقاط لقطة شاشة
+        screenshotFile := screenshotDir "\step1_" . FormatTime(A_Now, "yyyyMMdd_HHmmss") . ".png"
+        CaptureScreenArea(screenshotFile, SETTINGS["FixStep1X"] - 100, SETTINGS["FixStep1Y"] - 100, 200, 200)
+        Info("Step 1: Screenshot saved to " . screenshotFile)
+    } catch as e {
+        Warn("Failed to save Step 1 screenshot: " . e.Message)
+    }
+    
     Sleep(1500)
+    
+    ; الضغطة الثانية
+    Info("Online Fix Step 2: Clicking at (" . SETTINGS["FixStep2X"] . "," . SETTINGS["FixStep2Y"] . ")")
     Click(SETTINGS["FixStep2X"], SETTINGS["FixStep2Y"])
     STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
+    
+    ; حفظ الإحداثيات والتقاط لقطة شاشة
+    try {
+        ; حفظ الإحداثيات
+        coordsFile := screenshotDir "\step2_coordinates.txt"
+        coordsText := "Step 2 Coordinates: X=" . SETTINGS["FixStep2X"] . ", Y=" . SETTINGS["FixStep2Y"] . "`n"
+        coordsText .= "Timestamp: " . FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") . "`n"
+        coordsText .= "Screen Resolution: " . A_ScreenWidth . "x" . A_ScreenHeight . "`n"
+        FileAppend(coordsText, coordsFile, "UTF-8")
+        
+        ; التقاط لقطة شاشة
+        screenshotFile := screenshotDir "\step2_" . FormatTime(A_Now, "yyyyMMdd_HHmmss") . ".png"
+        CaptureScreenArea(screenshotFile, SETTINGS["FixStep2X"] - 100, SETTINGS["FixStep2Y"] - 100, 200, 200)
+        Info("Step 2: Screenshot saved to " . screenshotFile)
+    } catch as e {
+        Warn("Failed to save Step 2 screenshot: " . e.Message)
+    }
+    
     Sleep(1500)
+    
+    ; الضغطة الثالثة
+    Info("Online Fix Step 3: Clicking at (" . SETTINGS["FixStep3X"] . "," . SETTINGS["FixStep3Y"] . ")")
     Click(SETTINGS["FixStep3X"], SETTINGS["FixStep3Y"])
     STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
+    
+    ; حفظ الإحداثيات والتقاط لقطة شاشة
+    try {
+        ; حفظ الإحداثيات
+        coordsFile := screenshotDir "\step3_coordinates.txt"
+        coordsText := "Step 3 Coordinates: X=" . SETTINGS["FixStep3X"] . ", Y=" . SETTINGS["FixStep3Y"] . "`n"
+        coordsText .= "Timestamp: " . FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") . "`n"
+        coordsText .= "Screen Resolution: " . A_ScreenWidth . "x" . A_ScreenHeight . "`n"
+        FileAppend(coordsText, coordsFile, "UTF-8")
+        
+        ; التقاط لقطة شاشة
+        screenshotFile := screenshotDir "\step3_" . FormatTime(A_Now, "yyyyMMdd_HHmmss") . ".png"
+        CaptureScreenArea(screenshotFile, SETTINGS["FixStep3X"] - 100, SETTINGS["FixStep3Y"] - 100, 200, 200)
+        Info("Step 3: Screenshot saved to " . screenshotFile)
+        
+        ; حفظ ملخص العملية
+        summaryFile := screenshotDir "\fix_summary_" . FormatTime(A_Now, "yyyyMMdd_HHmmss") . ".txt"
+        summaryText := "Online Fix Operation Summary`n"
+        summaryText .= "================================`n"
+        summaryText .= "Timestamp: " . FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") . "`n"
+        summaryText .= "Offline Fix Attempts: " . (STATE.Has("offlineFixAttempts") ? STATE["offlineFixAttempts"] : 1) . "`n"
+        summaryText .= "Screen Resolution: " . A_ScreenWidth . "x" . A_ScreenHeight . "`n"
+        summaryText .= "`nStep 1: (" . SETTINGS["FixStep1X"] . "," . SETTINGS["FixStep1Y"] . ")`n"
+        summaryText .= "Step 2: (" . SETTINGS["FixStep2X"] . "," . SETTINGS["FixStep2Y"] . ")`n"
+        summaryText .= "Step 3: (" . SETTINGS["FixStep3X"] . "," . SETTINGS["FixStep3Y"] . ")`n"
+        FileAppend(summaryText, summaryFile, "UTF-8")
+        
+    } catch as e {
+        Warn("Failed to save Step 3 screenshot: " . e.Message)
+    }
+    
     Sleep(1500)
-    Info("Fix clicks performed.")
+    Info("Fix clicks performed with screenshots and coordinate logging.")
+}
+
+; دالة مساعدة لالتقاط منطقة من الشاشة
+CaptureScreenArea(filePath, x, y, width, height) {
+    try {
+        ; التأكد من أن الإحداثيات ضمن حدود الشاشة
+        x := Max(0, Min(x, A_ScreenWidth - width))
+        y := Max(0, Min(y, A_ScreenHeight - height))
+        width := Min(width, A_ScreenWidth - x)
+        height := Min(height, A_ScreenHeight - y)
+        
+        ; التقاط الشاشة باستخدام GDI+
+        pBitmap := Gdip_BitmapFromScreen(x . "|" . y . "|" . width . "|" . height)
+        if (pBitmap) {
+            Gdip_SaveBitmapToFile(pBitmap, filePath)
+            Gdip_DisposeImage(pBitmap)
+            return true
+        }
+    } catch as e {
+        Warn("CaptureScreenArea failed: " . e.Message)
+    }
+    return false
 }
 
 ; يحرك الماوس بعيدًا عن منطقة الداشبورد إذا كانت تختفي عند المرور عليها
@@ -244,13 +355,19 @@ ActivityMonitorTimer(*) {
 ; --- تحديث StayOnlineTimer لاستخدام idleCombined ---
 StayOnlineTimer(*) {
     global SETTINGS, STATE
+    
+    ; فحص إذا كانت المراقبة نشطة
+    if (!STATE.Has("monitoringActive") || !STATE["monitoringActive"]) {
+        return
+    }
+    
     if (!WinExist(SETTINGS["FrontlineWinTitle"]))
         return
     idlePhysical := A_TimeIdlePhysical
     idleSinceInternal := A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount)
     keyboardOnly := (SETTINGS.Has("ActivityKeyboardOnly") && SETTINGS["ActivityKeyboardOnly"]) ? true : false
     idleCombined := keyboardOnly ? idleSinceInternal : Min(idlePhysical, idleSinceInternal)
-    if (idleCombined < SETTINGS["UserIdleThreshold"]) ; لا ينفّذ أثناء النشاط الحقيقي
+    if (idleCombined < SETTINGS["UserIdleThreshold"]) ; لا ينفّذ أثناط النشاط الحقيقي
         return
     current := STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "Unknown"
     if (current != "Online")
@@ -284,9 +401,15 @@ StayOnlineTimer(*) {
     }
 }
 
-; --- تحديث RefreshTimer لاستخدام idleCombined ومنع التحريك أثناء النشاط ---
+; --- تحديث RefreshTimer لاستخدام idleCombined ومنع التحريق أثناط ---
 RefreshTimer(*) {
     global SETTINGS, STATE
+    
+    ; فحص إذا كانت المراقبة نشطة
+    if (!STATE.Has("monitoringActive") || !STATE["monitoringActive"]) {
+        return
+    }
+    
     if (!WinExist(SETTINGS["FrontlineWinTitle"]))
         return
     current := STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "Unknown"
@@ -294,47 +417,77 @@ RefreshTimer(*) {
         Info("Refresh skipped: status is " . current)
         return
     }
+    
+    ; التحقق من شروط الريفريش: الخمول دقيقتين+ ووجود Target Word والحالة أونلاين
     idlePhysical := A_TimeIdlePhysical
     idleSinceInternal := A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount)
     keyboardOnly := (SETTINGS.Has("ActivityKeyboardOnly") && SETTINGS["ActivityKeyboardOnly"]) ? true : false
     idleCombined := keyboardOnly ? idleSinceInternal : Min(idlePhysical, idleSinceInternal)
-    if (idleCombined < SETTINGS["UserIdleThreshold"]) {
-        Info("Refresh skipped: user active (idleCombined=" . idleCombined . ", thr=" . SETTINGS["UserIdleThreshold"] . ").")
+    idleOk := idleCombined >= SETTINGS["UserIdleThreshold"]
+    if !idleOk {
+        if (STATE["isAlarmPlaying"]) {
+            STATE["isAlarmPlaying"] := false
+            SetTimer(AlarmBeep, 0)
+            Info("Alarm stopped due to user activity.")
+        }
         return
     }
-    if (STATE.Has("actionBusyUntil") && A_TickCount < STATE["actionBusyUntil"]) {
-        Info("Refresh skipped (cooldown after action).")
+    
+    ; التحقق من وجود Target Word قبل الريفريش باستخدام النظام الذكي
+    targetResult := Map("found", false)
+    if (SETTINGS.Has("TargetImageList") && SETTINGS["TargetImageList"].Length > 0) {
+        targetResult := SmartElementSearch(SETTINGS["TargetImageList"], "TargetArea")
+    } else if (SETTINGS.Has("TargetImage") && FileExist(SETTINGS["TargetImage"])) {
+        targetResult := SmartElementSearch(SETTINGS["TargetImage"], "TargetArea")
+    }
+    
+    if (!targetResult["found"]) {
+        Info("Refresh skipped: Target Word not found")
         return
     }
-
-    stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
-    local sX, sY
-    stayVisible := (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0)
-        ? ImageListSearch(&sX, &sY, SETTINGS["StayOnlineImageList"], stayOnlineArea)
-        : ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)
-    if (stayVisible) {
+    
+    ; البحث الذكي عن Stay Online
+    stayOnlineResult := Map("found", false)
+    if (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0) {
+        stayOnlineResult := SmartElementSearch(SETTINGS["StayOnlineImageList"], "StayOnlineArea")
+    } else if (SETTINGS.Has("StayOnlineImage") && FileExist(SETTINGS["StayOnlineImage"])) {
+        stayOnlineResult := SmartElementSearch(SETTINGS["StayOnlineImage"], "StayOnlineArea")
+    }
+    
+    if (stayOnlineResult["found"]) {
         Info("Stay Online button found before refresh - clicking it first")
-        Click(sX, sY)
+        Click(stayOnlineResult["x"], stayOnlineResult["y"])
         STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
         Sleep(1000)
-        stillVisible := (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0)
-            ? ImageListSearch(&sX, &sY, SETTINGS["StayOnlineImageList"], stayOnlineArea)
-            : ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)
-        if (stillVisible) {
+        
+        ; إعادة فحص Stay Online بعد النقر
+        stillVisibleResult := Map("found", false)
+        if (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0) {
+            stillVisibleResult := SmartElementSearch(SETTINGS["StayOnlineImageList"], "StayOnlineArea")
+        } else if (SETTINGS.Has("StayOnlineImage") && FileExist(SETTINGS["StayOnlineImage"])) {
+            stillVisibleResult := SmartElementSearch(SETTINGS["StayOnlineImage"], "StayOnlineArea")
+        }
+        
+        if (stillVisibleResult["found"]) {
             Info("Stay Online window still visible after click - skipping refresh")
             return
         }
     }
 
-    Info("Refresh proceeding: idleCombined=" . idleCombined . " >= thr=" . SETTINGS["UserIdleThreshold"] . ".")
-    Click(SETTINGS["RefreshX"], SETTINGS["RefreshY"])
+    ; استخدام الإحداثيات الذكية للريفريش
+    refreshCoords := GetSmartCoordinates("RefreshButton")
+    refreshX := refreshCoords.Has("x") ? refreshCoords["x"] : SETTINGS["RefreshX"]
+    refreshY := refreshCoords.Has("y") ? refreshCoords["y"] : SETTINGS["RefreshY"]
+
+    Info("Refresh proceeding: idleCombined=" . idleCombined . " >= thr=" . SETTINGS["UserIdleThreshold"] . ", Target found, Status=Online.")
+    Click(refreshX, refreshY)
     STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
     CoordMode "Mouse", "Screen"
-    tx := Min(A_ScreenWidth - 5, SETTINGS["RefreshX"] + 150)
-    ty := Min(A_ScreenHeight - 5, SETTINGS["RefreshY"] + 150)
+    tx := Min(A_ScreenWidth - 5, refreshX + 150)
+    ty := Min(A_ScreenHeight - 5, refreshY + 150)
     MouseMove tx, ty, 0
     STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
-    Info("Refresh performed - Time-based")
+    Info("Refresh performed - Time-based (Smart Coordinates)")
     STATE["lastRefreshTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
     delayMs := SETTINGS.Has("PostRefreshDelayMs") ? SETTINGS["PostRefreshDelayMs"] : 2500
     STATE["actionBusyUntil"] := A_TickCount + delayMs
@@ -343,16 +496,21 @@ RefreshTimer(*) {
 MonitorTargetTimer(*) {
     global SETTINGS, STATE
     static lastIdleCheck := 0
+    
+    ; فحص إذا كانت المراقبة نشطة
+    if (!STATE.Has("monitoringActive") || !STATE["monitoringActive"]) {
+        return
+    }
+    
     ; تجنّب الفحص أثناء نافذة الانشغال بعد أي إجراء (مثل Refresh أو Stay Online)
     if (STATE.Has("actionBusyUntil") && A_TickCount < STATE["actionBusyUntil"]) {
         ; Info("MonitorTarget skipped (post action delay)")
         return
     }
-    if (A_TickCount - lastIdleCheck < 10000)
+    if (A_TickCount - lastIdleCheck < SETTINGS["MainLoopInterval"]) {
         return
+    }
     lastIdleCheck := A_TickCount
-    ; إزالة تحريك الماوس الدوري لتجنّب إزعاج المستخدم
-    ; NudgeMouseAwayFromDashboard()
 
     allowed := SETTINGS.Has("TargetMonitorStatuses") ? SETTINGS["TargetMonitorStatuses"] : ["Online"]
     current := STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "Unknown"
@@ -372,18 +530,30 @@ MonitorTargetTimer(*) {
         return
     }
 
-    ; تعريف منطقة البحث عن التارجت
-    targetArea := Map("x1", SETTINGS["TargetAreaTopLeftX"], "y1", SETTINGS["TargetAreaTopLeftY"], "x2", SETTINGS["TargetAreaBottomRightX"], "y2", SETTINGS["TargetAreaBottomRightY"])
+    ; استخدام النظام الذكي للبحث عن Target Word
     local foundX, foundY
-    hasTarget := (SETTINGS.Has("TargetImageList") && SETTINGS["TargetImageList"].Length > 0)
-        ? ImageListSearch(&foundX, &foundY, SETTINGS["TargetImageList"], targetArea)
-        : ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], targetArea)
+    searchResult := Map("found", false)
+    
+    if (SETTINGS.Has("TargetImageList") && SETTINGS["TargetImageList"].Length > 0) {
+        searchResult := SmartElementSearch(SETTINGS["TargetImageList"], "TargetArea")
+    } else if (SETTINGS.Has("TargetImage") && FileExist(SETTINGS["TargetImage"])) {
+        searchResult := SmartElementSearch(SETTINGS["TargetImage"], "TargetArea")
+    }
+    
+    hasTarget := searchResult["found"]
+    
     if (!hasTarget) {
         confirmedMissing := true
         Loop 3 {
             Sleep(1000)
-            if ((SETTINGS.Has("TargetImageList") && ImageListSearch(&foundX, &foundY, SETTINGS["TargetImageList"], targetArea))
-                || ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], targetArea)) {
+            ; إعادة البحث الذكي
+            if (SETTINGS.Has("TargetImageList") && SETTINGS["TargetImageList"].Length > 0) {
+                retryResult := SmartElementSearch(SETTINGS["TargetImageList"], "TargetArea")
+            } else {
+                retryResult := SmartElementSearch(SETTINGS["TargetImage"], "TargetArea")
+            }
+            
+            if (retryResult["found"]) {
                 confirmedMissing := false
                 Info("Target word re-appeared during triple-check. No alarm.")
                 break
@@ -407,41 +577,64 @@ MonitorTargetTimer(*) {
             return
         }
 
-        stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
-        local sX, sY
-        stayVisible := (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0)
-            ? ImageListSearch(&sX, &sY, SETTINGS["StayOnlineImageList"], stayOnlineArea)
-            : ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)
-        if (stayVisible) {
+        ; البحث الذكي عن Stay Online
+        stayOnlineResult := Map("found", false)
+        if (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0) {
+            stayOnlineResult := SmartElementSearch(SETTINGS["StayOnlineImageList"], "StayOnlineArea")
+        } else if (SETTINGS.Has("StayOnlineImage") && FileExist(SETTINGS["StayOnlineImage"])) {
+            stayOnlineResult := SmartElementSearch(SETTINGS["StayOnlineImage"], "StayOnlineArea")
+        }
+        
+        if (stayOnlineResult["found"]) {
             Info("Target missing BUT Stay Online window is visible. Will attempt to dismiss it and re-check target.")
             ClickStayOnlineButton()
             attempts := 0
             Loop 5 {
                 Sleep(1000)
                 attempts++
-                stillStay := (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0)
-                    ? ImageListSearch(&sX, &sY, SETTINGS["StayOnlineImageList"], stayOnlineArea)
-                    : ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea)
-                targetBack := (SETTINGS.Has("TargetImageList") && ImageListSearch(&foundX, &foundY, SETTINGS["TargetImageList"], targetArea))
-                    || ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], targetArea)
-                if (!stillStay && targetBack) {
+                
+                ; إعادة البحث الذكي
+                stillStayResult := Map("found", false)
+                if (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0) {
+                    stillStayResult := SmartElementSearch(SETTINGS["StayOnlineImageList"], "StayOnlineArea")
+                } else if (SETTINGS.Has("StayOnlineImage") && FileExist(SETTINGS["StayOnlineImage"])) {
+                    stillStayResult := SmartElementSearch(SETTINGS["StayOnlineImage"], "StayOnlineArea")
+                }
+                
+                targetBackResult := Map("found", false)
+                if (SETTINGS.Has("TargetImageList") && SETTINGS["TargetImageList"].Length > 0) {
+                    targetBackResult := SmartElementSearch(SETTINGS["TargetImageList"], "TargetArea")
+                } else {
+                    targetBackResult := SmartElementSearch(SETTINGS["TargetImage"], "TargetArea")
+                }
+                
+                if (!stillStayResult["found"] && targetBackResult["found"]) {
                     Info("Target is back after dismissing Stay Online. No alarm.")
                     return
                 }
-                if (!stillStay && !targetBack) {
+                if (!stillStayResult["found"] && !targetBackResult["found"]) {
                     Info("Stay Online dismissed but Target still missing after " . attempts . "s.")
                     break
                 }
-                if (stillStay && attempts >= 5) {
+                if (stillStayResult["found"] && attempts >= 5) {
                     Info("Stay Online still visible after retries. Will raise alarm.")
                     break
                 }
             }
-            try SaveTargetWordScreenshot("target_missing")
+            try {
+                SaveTargetWordScreenshot("target_missing")
+            } catch {
+            }
 
             cause := "Unknown"
-            if ((SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0 && ImageListSearch(&sX, &sY, SETTINGS["StayOnlineImageList"], stayOnlineArea))
-                || ReliableImageSearch(&sX, &sY, SETTINGS["StayOnlineImage"], stayOnlineArea))
+            finalStayCheck := Map("found", false)
+            if (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0) {
+                finalStayCheck := SmartElementSearch(SETTINGS["StayOnlineImageList"], "StayOnlineArea")
+            } else if (SETTINGS.Has("StayOnlineImage") && FileExist(SETTINGS["StayOnlineImage"])) {
+                finalStayCheck := SmartElementSearch(SETTINGS["StayOnlineImage"], "StayOnlineArea")
+            }
+            
+            if (finalStayCheck["found"])
                 cause := "StayOnlineStillVisible"
             else
                 cause := "TargetStillMissingAfterDismiss"
@@ -461,7 +654,10 @@ MonitorTargetTimer(*) {
             return
         }
 
-        try SaveTargetWordScreenshot("target_missing")
+        try {
+            SaveTargetWordScreenshot("target_missing")
+        } catch {
+        }
         if !STATE["isAlarmPlaying"] {
             STATE["isAlarmPlaying"] := true
             ShowLocalNotification("🚨 ALARM: Target Word NOT FOUND!")
@@ -520,6 +716,16 @@ ClickStayOnlineButton() {
                     STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
                     Sleep(100)
                     Click
+                    ; Wrap single-line try statements with blocks
+                    try {
+                        SaveTargetWordScreenshot("target_missing")
+                    } catch {
+                    }
+                    ; تصوير بعد كل نقرة
+                    try {
+                        SaveStayOnlineScreenshot("after_click_" . A_Index)
+                    } catch {
+                    }
                     STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
                     Sleep(500)
                 } finally {
@@ -533,10 +739,20 @@ ClickStayOnlineButton() {
                     STATE["lastStayOnlineClickTime"] := A_TickCount
                     STATE["lastStayOnlineTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
                     Info("Stay Online button clicked successfully.")
+                    ; صورة عند النجاح
+                    try {
+                        SaveStayOnlineScreenshot("success")
+                    } catch {
+                    }
                     return true
                 }
             }
             Warn("Failed to dismiss Stay Online after multiple attempts.")
+            ; صورة عند الفشل بعد كل المحاولات
+            try {
+                SaveStayOnlineScreenshot("failed")
+            } catch {
+            }
             return false
         } else {
             return false
