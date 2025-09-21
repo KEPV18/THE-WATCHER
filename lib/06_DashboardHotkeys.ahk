@@ -61,10 +61,14 @@ UpdateDashboard() {
     ; إضافة معلومات الوضع الذكي
     monitoringStatus := STATE.Has("monitoringActive") && STATE["monitoringActive"] ? "Active" : "Waiting"
     intelligentMode := STATE.Has("intelligentMode") && STATE["intelligentMode"] ? "ON" : "OFF"
+    
+    ; معلومات Target Word
+    lastTargetCheck := STATE.Has("lastTargetCheck") ? STATE["lastTargetCheck"] : "Never"
+    lastTargetFound := STATE.Has("lastTargetFound") ? STATE["lastTargetFound"] : "Never"
 
     if !isExpanded {
         text := "S: " . statusText . " | " . netShort . " | Battery " . batteryPercentText . " | Idle " . idleText . "`n"
-        text .= "Monitor: " . monitoringStatus . " | Smart: " . intelligentMode . " | (Ctrl+Alt+D للتفاصيل)"
+        text .= "Monitor: " . monitoringStatus . " | Smart: " . intelligentMode . " | Target: " . lastTargetCheck . " | (Ctrl+Alt+D للتفاصيل)"
     } else {
         text := "The Watcher by A.k (Smart Mode)`n"
         text .= "Status: " . statusText . " | Alarm: " . alarmText . "`n"
@@ -72,7 +76,8 @@ UpdateDashboard() {
         text .= "Battery: " . batteryText . " | User Idle: " . idleText . "`n"
         text .= "Monitoring: " . monitoringStatus . " | Intelligent Mode: " . intelligentMode . "`n"
         text .= "Last Check: " . lastCheck . " | Last Refresh: " . lastRefresh . "`n"
-        text .= "Last Stay Online: " . lastStay
+        text .= "Last Stay Online: " . lastStay . "`n"
+        text .= "Target Check: " . lastTargetCheck . " | Target Found: " . lastTargetFound
     }
 
     ; --- النظام الذكي للداشبورد: تقسيم الشاشة وتجنب الماوس ---

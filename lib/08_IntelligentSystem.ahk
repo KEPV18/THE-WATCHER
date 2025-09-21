@@ -113,10 +113,12 @@ DetectTargetAreaCoordinates() {
     
     if (!SETTINGS.Has("TargetImageList") || SETTINGS["TargetImageList"].Length == 0) {
         if (!SETTINGS.Has("TargetImage") || !FileExist(SETTINGS["TargetImage"])) {
+            Warn("No Target images configured for detection")
             return false
         }
     }
     
+    ; محاولة البحث في كل الشاشات مع تحسين الدقة
     for screenInfo in STATE["detectedScreens"] {
         searchArea := Map(
             "x1", screenInfo["left"],
@@ -128,37 +130,66 @@ DetectTargetAreaCoordinates() {
         local foundX, foundY
         targetFound := false
         
-        ; البحث باستخدام قائمة الصور إن وجدت
+        ; البحث باستخدام قائمة الصور مع تحسين الدقة
         if (SETTINGS.Has("TargetImageList") && SETTINGS["TargetImageList"].Length > 0) {
             for imgPath in SETTINGS["TargetImageList"] {
+                ; محاولة البحث بالدقة الافتراضية
                 if (ReliableImageSearch(&foundX, &foundY, imgPath, searchArea)) {
                     targetFound := true
+                    Info("Target found using: " . imgPath)
                     break
                 }
             }
         } else {
-            targetFound := ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], searchArea)
+            ; البحث بالصورة الواحدة
+            if (ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], searchArea)) {
+                targetFound := true
+                Info("Target found using single image")
+            }
         }
         
         if (targetFound) {
-            ; تحديد منطقة أكبر حول Target Word
-            margin := 100
+            ; تحديد منطقة أكبر حول Target Word مع تحسين الحدود
+            margin := 150  ; زيادة الهامش
             newTargetArea := Map(
                 "x1", Max(screenInfo["left"], foundX - margin),
                 "y1", Max(screenInfo["top"], foundY - margin),
-                "x2", Min(screenInfo["right"], foundX + margin + 200),
-                "y2", Min(screenInfo["bottom"], foundY + margin + 100)
+                "x2", Min(screenInfo["right"], foundX + margin + 300),  ; منطقة أوسع
+                "y2", Min(screenInfo["bottom"], foundY + margin + 150)
             )
             
             profileKey := "TargetArea_Screen" . screenInfo["index"]
             STATE["smartCoordinates"][profileKey] := newTargetArea
             
-            Info("Detected Target Area on Screen " . screenInfo["index"] . " at (" . foundX . "," . foundY . ")")
+            ; حفظ الإحداثيات في الإعدادات أيضاً
+            SETTINGS["TargetAreaTopLeftX"] := newTargetArea["x1"]
+            SETTINGS["TargetAreaTopLeftY"] := newTargetArea["y1"]
+            SETTINGS["TargetAreaBottomRightX"] := newTargetArea["x2"]
+            SETTINGS["TargetAreaBottomRightY"] := newTargetArea["y2"]
+            
+            Info("Detected Target Area on Screen " . screenInfo["index"] . " at (" . foundX . "," . foundY . ") - Area: " . newTargetArea["x1"] . "," . newTargetArea["y1"] . " to " . newTargetArea["x2"] . "," . newTargetArea["y2"])
             return true
         }
     }
     
-    Warn("Could not detect Target Area automatically")
+    ; إذا فشل الاكتشاف، استخدم منطقة افتراضية أوسع
+    Info("Target Area detection failed - using expanded default area")
+    defaultArea := Map(
+        "x1", 500,
+        "y1", 300,
+        "x2", 1400,
+        "y2", 800
+    )
+    
+    SETTINGS["TargetAreaTopLeftX"] := defaultArea["x1"]
+    SETTINGS["TargetAreaTopLeftY"] := defaultArea["y1"]
+    SETTINGS["TargetAreaBottomRightX"] := defaultArea["x2"]
+    SETTINGS["TargetAreaBottomRightY"] := defaultArea["y2"]
+    
+    profileKey := "TargetArea_Screen1"
+    STATE["smartCoordinates"][profileKey] := defaultArea
+    
+    Warn("Could not detect Target Area automatically - using expanded default area")
     return false
 }
 

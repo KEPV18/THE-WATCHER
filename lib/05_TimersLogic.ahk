@@ -380,18 +380,29 @@ StayOnlineTimer(*) {
         STATE["actionBusyUntil"] := A_TickCount + 3000
         STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
     } else {
+        ; تحسين fallback click لتجنب التداخل مع الداشبورد
         stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
         cx := (stayOnlineArea["x1"] + stayOnlineArea["x2"]) // 2
         cy := (stayOnlineArea["y1"] + stayOnlineArea["y2"]) // 2
+        
+        ; حفظ موقع الماوس الحالي
+        MouseGetPos(&currentX, &currentY)
+        
         CoordMode "Mouse", "Screen"
-        MouseMove cx, cy, 0
+        MouseMove cx, cy, 2  ; حركة سريعة
         Click
+        
+        ; العودة لموقع الماوس الأصلي
+        MouseMove currentX, currentY, 2
+        
         STATE["lastStayOnlineClickTime"] := A_TickCount
         STATE["lastStayOnlineTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
         STATE["actionBusyUntil"] := A_TickCount + 3000
         STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
         Info("Stay Online: button not detected, performed fallback center click.")
-        Sleep 1000
+        Sleep 500  ; تقليل وقت الانتظار
+        
+        ; محاولة ثانية بعد fallback click
         if (ClickStayOnlineButton()) {
             STATE["lastStayOnlineClickTime"] := A_TickCount
             STATE["lastStayOnlineTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
@@ -433,7 +444,7 @@ RefreshTimer(*) {
         return
     }
     
-    ; التحقق من وجود Target Word قبل الريفريش باستخدام النظام الذكي
+    ; التحقق من وجود Target Word - إذا لم يوجد، نحتاج للريفريش!
     targetResult := Map("found", false)
     if (SETTINGS.Has("TargetImageList") && SETTINGS["TargetImageList"].Length > 0) {
         targetResult := SmartElementSearch(SETTINGS["TargetImageList"], "TargetArea")
@@ -441,10 +452,16 @@ RefreshTimer(*) {
         targetResult := SmartElementSearch(SETTINGS["TargetImage"], "TargetArea")
     }
     
-    if (!targetResult["found"]) {
-        Info("Refresh skipped: Target Word not found")
+    ; إذا كان Target Word موجود، لا نحتاج للريفريش
+    if (targetResult["found"]) {
+        ; تحديث آخر مرة تم العثور على Target Word
+        STATE["lastTargetFound"] := FormatTime(A_Now, "HH:mm:ss")
+        Info("Refresh skipped: Target Word found - no refresh needed")
         return
     }
+    
+    ; إذا لم يوجد Target Word، نحتاج للريفريش لمحاولة إعادة تحميل الصفحة
+    Info("Target Word not found - proceeding with refresh to reload page")
     
     ; البحث الذكي عن Stay Online
     stayOnlineResult := Map("found", false)
@@ -479,9 +496,20 @@ RefreshTimer(*) {
     refreshX := refreshCoords.Has("x") ? refreshCoords["x"] : SETTINGS["RefreshX"]
     refreshY := refreshCoords.Has("y") ? refreshCoords["y"] : SETTINGS["RefreshY"]
 
-    Info("Refresh proceeding: idleCombined=" . idleCombined . " >= thr=" . SETTINGS["UserIdleThreshold"] . ", Target found, Status=Online.")
+    Info("Refresh proceeding: idleCombined=" . idleCombined . " >= thr=" . SETTINGS["UserIdleThreshold"] . ", Target missing, Status=Online - refreshing to reload page.")
+    
+    ; حفظ موقع الماوس الحالي لتجنب التداخل مع الداشبورد
+    MouseGetPos(&currentX, &currentY)
+    
     Click(refreshX, refreshY)
+    
+    ; العودة لموقع الماوس الأصلي
+    MouseMove currentX, currentY, 2
+    
     STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
+    STATE["lastRefreshTime"] := A_TickCount
+    STATE["lastRefreshTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
+    Info("Refresh button clicked - page should reload")
     CoordMode "Mouse", "Screen"
     tx := Min(A_ScreenWidth - 5, refreshX + 150)
     ty := Min(A_ScreenHeight - 5, refreshY + 150)
@@ -542,8 +570,45 @@ MonitorTargetTimer(*) {
     
     hasTarget := searchResult["found"]
     
+    ; تحديث آخر مرة تم التحقق من Target Word
+    STATE["lastTargetCheck"] := FormatTime(A_Now, "HH:mm:ss")
+    if (hasTarget) {
+        STATE["lastTargetFound"] := FormatTime(A_Now, "HH:mm:ss")
+        STATE["targetMissingStartTime"] := 0  ; إعادة تعيين عداد الاختفاء
+    }
+    
     if (!hasTarget) {
-        confirmedMissing := true
+        ; تتبع بداية اختفاء Target Word
+        if (!STATE.Has("targetMissingStartTime") || STATE["targetMissingStartTime"] == 0) {
+            STATE["targetMissingStartTime"] := A_TickCount
+            Info("Target Word disappeared - starting missing timer")
+        }
+        
+        ; حساب مدة الاختفاء
+        missingDuration := A_TickCount - STATE["targetMissingStartTime"]
+        missingMinutes := missingDuration / 60000  ; تحويل لدقائق
+        
+        ; إنذار إذا اختفى Target Word لأكثر من 5 دقائق
+        if (missingMinutes >= 5 && !STATE.Has("targetMissingAlarmSent")) {
+            STATE["targetMissingAlarmSent"] := true
+            ShowLocalNotification("⚠️ Target Word missing for " . Round(missingMinutes, 1) . " minutes!")
+            QueueTelegram(Map("type", "text", "title", "⚠️ Target Word Missing Alert", 
+                           "details", Map("Duration", Round(missingMinutes, 1) . " minutes", 
+                                        "Last Found", STATE.Has("lastTargetFound") ? STATE["lastTargetFound"] : "Unknown",
+                                        "Action", "System will continue monitoring and refreshing")))
+            Warn("Target Word has been missing for " . Round(missingMinutes, 1) . " minutes")
+        }
+        
+        ; إنذار إضافي كل 10 دقائق
+        if (missingMinutes >= 10 && Mod(Floor(missingMinutes), 10) == 0 && !STATE.Has("targetMissing" . Floor(missingMinutes) . "minAlarm")) {
+            STATE["targetMissing" . Floor(missingMinutes) . "minAlarm"] := true
+            ShowLocalNotification("🚨 Target Word still missing after " . Floor(missingMinutes) . " minutes!")
+            QueueTelegram(Map("type", "text", "title", "🚨 Extended Target Word Absence", 
+                           "details", Map("Duration", Floor(missingMinutes) . " minutes", 
+                                        "Status", "Critical - Target Word not found for extended period")))
+        }
+         
+         confirmedMissing := true
         Loop 3 {
             Sleep(1000)
             ; إعادة البحث الذكي
@@ -555,6 +620,15 @@ MonitorTargetTimer(*) {
             
             if (retryResult["found"]) {
                 confirmedMissing := false
+                STATE["lastTargetFound"] := FormatTime(A_Now, "HH:mm:ss")  ; تحديث آخر مرة وُجد
+                STATE["targetMissingStartTime"] := 0  ; إعادة تعيين عداد الاختفاء
+                ; إعادة تعيين إنذارات الاختفاء
+                STATE.Delete("targetMissingAlarmSent")
+                for key in STATE {
+                    if (InStr(key, "targetMissing") && InStr(key, "minAlarm")) {
+                        STATE.Delete(key)
+                    }
+                }
                 Info("Target word re-appeared during triple-check. No alarm.")
                 break
             }
@@ -710,26 +784,28 @@ ClickStayOnlineButton() {
             clickX := foundX + 10
             clickY := foundY + 10
             Loop 3 {
-                BlockInput true
+                ; إزالة BlockInput لتجنب تجميد الداشبورد
                 try {
-                    MouseMove clickX, clickY
+                    ; حفظ موقع الماوس الحالي
+                    MouseGetPos(&currentX, &currentY)
+                    
+                    MouseMove clickX, clickY, 2  ; حركة سريعة للزر
                     STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
-                    Sleep(100)
+                    Sleep(50)
                     Click
-                    ; Wrap single-line try statements with blocks
-                    try {
-                        SaveTargetWordScreenshot("target_missing")
-                    } catch {
-                    }
+                    
+                    ; العودة لموقع الماوس الأصلي بسرعة
+                    MouseMove currentX, currentY, 2
+                    
                     ; تصوير بعد كل نقرة
                     try {
                         SaveStayOnlineScreenshot("after_click_" . A_Index)
                     } catch {
                     }
                     STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
-                    Sleep(500)
-                } finally {
-                    BlockInput false
+                    Sleep(300)  ; تقليل وقت الانتظار
+                } catch as e {
+                    Warn("Error during Stay Online click: " . e.Message)
                 }
                 local sx, sy
                 still := (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0)
