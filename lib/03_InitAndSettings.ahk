@@ -13,7 +13,7 @@ InitializeScript() {
     SETTINGS["UserIdleThreshold"] := 120000        ; عتبة خمول المستخدم = 120 ثانية
     SETTINGS["StayOnlineInterval"] := 120000       ; تحقق زر Stay Online كل دقيقتين
     ; إضافة إعدادات جديدة للنظام الذكي
-    SETTINGS["InitialIdleWait"] := 120000          ; انتظار دقيقتين قبل بدء أي مراقبة
+    SETTINGS["InitialIdleWait"] := 60000          ; انتظار دقيقتين قبل بدء أي مراقبة
     SETTINGS["SmartDashboard"] := true             ; تفعيل الداشبورد الذكي
     SETTINGS["IntelligentCoordinates"] := true     ; تفعيل اكتشاف الإحداثيات الذكي
     SETTINGS["MultiScreenSupport"] := true        ; دعم الشاشات المتعددة

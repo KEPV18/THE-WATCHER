@@ -114,8 +114,14 @@ SmartDashboardPositioning(text, mouseX, mouseY, width, height, margin) {
         return
     }
     
-    ; معالجة كل شاشة على حدة
+    ; إخفاء جميع الداشبوردات أولاً
+    Loop 10 {
+        ToolTip(, , , 10 + A_Index)
+    }
+    
+    ; معالجة كل شاشة على حدة للعثور على الشاشة التي بها الماوس
     monitorCount := MonitorGetCount()
+    mouseScreen := 0
     
     Loop monitorCount {
         monitorIndex := A_Index
@@ -125,6 +131,8 @@ SmartDashboardPositioning(text, mouseX, mouseY, width, height, margin) {
             
             ; فحص إذا كان الماوس في هذه الشاشة
             if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
+                mouseScreen := monitorIndex
+                
                 ; تقسيم الشاشة إلى نصفين
                 screenWidth := right - left
                 screenHeight := bottom - top
@@ -154,8 +162,8 @@ SmartDashboardPositioning(text, mouseX, mouseY, width, height, margin) {
                     dashX := right - margin - width
                 }
                 
-                ; عرض الداشبورد في الموقع المحسوب
-                ShowTooltipForScreen(text, 18 + monitorIndex, dashX, dashY)
+                ; عرض الداشبورد في الموقع المحسوب (داشبورد واحدة فقط)
+                ShowTooltipForScreen(text, 19, dashX, dashY)
                 
                 ; حفظ الموقع الجديد للاستخدام المستقبلي
                 if (monitorIndex == 1) {
@@ -166,29 +174,27 @@ SmartDashboardPositioning(text, mouseX, mouseY, width, height, margin) {
                     STATE["dashboardY2"] := dashY
                 }
                 
-            } else {
-                ; الماوس ليس في هذه الشاشة، استخدم الموقع الافتراضي أو المحفوظ
-                local defaultX, defaultY
-                
-                if (monitorIndex == 1) {
-                    defaultX := STATE.Has("dashboardX1") ? STATE["dashboardX1"] : (SETTINGS.Has("DashboardX") ? SETTINGS["DashboardX"] : left + 10)
-                    defaultY := STATE.Has("dashboardY1") ? STATE["dashboardY1"] : (SETTINGS.Has("DashboardY") ? SETTINGS["DashboardY"] : top + 120)
-                } else if (monitorIndex == 2) {
-                    defaultX := STATE.Has("dashboardX2") ? STATE["dashboardX2"] : (SETTINGS.Has("DashboardX2") ? SETTINGS["DashboardX2"] : left + 10)
-                    defaultY := STATE.Has("dashboardY2") ? STATE["dashboardY2"] : (SETTINGS.Has("DashboardY2") ? SETTINGS["DashboardY2"] : top + 120)
-                } else {
-                    defaultX := left + 10
-                    defaultY := top + 120
-                }
-                
-                ShowTooltipForScreen(text, 18 + monitorIndex, defaultX, defaultY)
+                ; إنهاء الحلقة بعد العثور على الشاشة الصحيحة
+                break
             }
             
         } catch as e {
             ; في حالة حدوث خطأ، استخدم الموقع الافتراضي
-            local fallbackX := (monitorIndex == 1) ? 10 : 1930
+            local fallbackX := 10
             local fallbackY := 120
-            ShowTooltipForScreen(text, 18 + monitorIndex, fallbackX, fallbackY)
+            ShowTooltipForScreen(text, 19, fallbackX, fallbackY)
+        }
+    }
+    
+    ; إذا لم يتم العثور على الماوس في أي شاشة، استخدم الشاشة الأولى
+    if (mouseScreen == 0) {
+        try {
+            MonitorGet(1, &left, &top, &right, &bottom)
+            local defaultX := left + 10
+            local defaultY := top + 120
+            ShowTooltipForScreen(text, 19, defaultX, defaultY)
+        } catch {
+            ShowTooltipForScreen(text, 19, 10, 120)
         }
     }
 }

@@ -588,6 +588,18 @@ MonitorTargetTimer(*) {
         missingDuration := A_TickCount - STATE["targetMissingStartTime"]
         missingMinutes := missingDuration / 60000  ; تحويل لدقائق
         
+        ; التحقق من النشاط قبل إرسال الإنذار الإنذار
+        if (STATE.Has("lastUserActivity")) {
+            timeSinceActivity := A_TickCount - STATE["lastUserActivity"]
+            activityMinutes := timeSinceActivity / 60000
+            
+            ; إذا كان هناك نشاط حديث، لا ترسل إنذار
+            if (activityMinutes < 2) {
+                Info("User activity detected recently, skipping target missing alarm")
+                return
+            }
+        }
+        
         ; إنذار إذا اختفى Target Word لأكثر من 5 دقائق
         if (missingMinutes >= 5 && !STATE.Has("targetMissingAlarmSent")) {
             STATE["targetMissingAlarmSent"] := true
@@ -608,148 +620,44 @@ MonitorTargetTimer(*) {
                                         "Status", "Critical - Target Word not found for extended period")))
         }
          
-         confirmedMissing := true
+        ; التحقق الثلاثي باستخدام البحث التكيفي
+        confirmedMissing := true
         Loop 3 {
             Sleep(1000)
-            ; إعادة البحث الذكي
+            ; إعادة البحث التكيفي
             if (SETTINGS.Has("TargetImageList") && SETTINGS["TargetImageList"].Length > 0) {
-                retryResult := SmartElementSearch(SETTINGS["TargetImageList"], "TargetArea")
+                retryResult := AdaptiveTargetSearch(SETTINGS["TargetImageList"])
             } else {
-                retryResult := SmartElementSearch(SETTINGS["TargetImage"], "TargetArea")
+                retryResult := AdaptiveTargetSearch(SETTINGS["TargetImage"])
             }
             
             if (retryResult["found"]) {
                 confirmedMissing := false
-                STATE["lastTargetFound"] := FormatTime(A_Now, "HH:mm:ss")  ; تحديث آخر مرة وُجد
-                STATE["targetMissingStartTime"] := 0  ; إعادة تعيين عداد الاختفاء
-                ; إعادة تعيين إنذارات الاختفاء
+                Info("Target Word found in retry attempt " . A_Index . " - resetting alarm state")
+                ; إعادة تعيين حالة الإنذار عند العثور على Target Word
+                STATE["targetMissingStartTime"] := 0
                 STATE.Delete("targetMissingAlarmSent")
+                ; حذف جميع إنذارات الدقائق المتعددة
                 for key in STATE {
                     if (InStr(key, "targetMissing") && InStr(key, "minAlarm")) {
                         STATE.Delete(key)
                     }
                 }
-                Info("Target word re-appeared during triple-check. No alarm.")
                 break
             }
         }
-        if (!confirmedMissing) {
-            return
-        }
-
-        idlePhysical := A_TimeIdlePhysical
-        idleSinceInternal := A_TickCount - (STATE.Has("lastUserActivity") ? STATE["lastUserActivity"] : A_TickCount)
-        keyboardOnly := (SETTINGS.Has("ActivityKeyboardOnly") && SETTINGS["ActivityKeyboardOnly"]) ? true : false
-        idleCombined := keyboardOnly ? idleSinceInternal : Min(idlePhysical, idleSinceInternal)
-        idleOk := idleCombined >= SETTINGS["UserIdleThreshold"]
-        if !idleOk {
-            if (STATE["isAlarmPlaying"]) {
-                STATE["isAlarmPlaying"] := false
-                SetTimer(AlarmBeep, 0)
-                Info("Alarm stopped due to user activity.")
-            }
-            return
-        }
-
-        ; البحث الذكي عن Stay Online
-        stayOnlineResult := Map("found", false)
-        if (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0) {
-            stayOnlineResult := SmartElementSearch(SETTINGS["StayOnlineImageList"], "StayOnlineArea")
-        } else if (SETTINGS.Has("StayOnlineImage") && FileExist(SETTINGS["StayOnlineImage"])) {
-            stayOnlineResult := SmartElementSearch(SETTINGS["StayOnlineImage"], "StayOnlineArea")
-        }
-        
-        if (stayOnlineResult["found"]) {
-            Info("Target missing BUT Stay Online window is visible. Will attempt to dismiss it and re-check target.")
-            ClickStayOnlineButton()
-            attempts := 0
-            Loop 5 {
-                Sleep(1000)
-                attempts++
-                
-                ; إعادة البحث الذكي
-                stillStayResult := Map("found", false)
-                if (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0) {
-                    stillStayResult := SmartElementSearch(SETTINGS["StayOnlineImageList"], "StayOnlineArea")
-                } else if (SETTINGS.Has("StayOnlineImage") && FileExist(SETTINGS["StayOnlineImage"])) {
-                    stillStayResult := SmartElementSearch(SETTINGS["StayOnlineImage"], "StayOnlineArea")
-                }
-                
-                targetBackResult := Map("found", false)
-                if (SETTINGS.Has("TargetImageList") && SETTINGS["TargetImageList"].Length > 0) {
-                    targetBackResult := SmartElementSearch(SETTINGS["TargetImageList"], "TargetArea")
-                } else {
-                    targetBackResult := SmartElementSearch(SETTINGS["TargetImage"], "TargetArea")
-                }
-                
-                if (!stillStayResult["found"] && targetBackResult["found"]) {
-                    Info("Target is back after dismissing Stay Online. No alarm.")
-                    return
-                }
-                if (!stillStayResult["found"] && !targetBackResult["found"]) {
-                    Info("Stay Online dismissed but Target still missing after " . attempts . "s.")
-                    break
-                }
-                if (stillStayResult["found"] && attempts >= 5) {
-                    Info("Stay Online still visible after retries. Will raise alarm.")
-                    break
-                }
-            }
-            try {
-                SaveTargetWordScreenshot("target_missing")
-            } catch {
-            }
-
-            cause := "Unknown"
-            finalStayCheck := Map("found", false)
-            if (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0) {
-                finalStayCheck := SmartElementSearch(SETTINGS["StayOnlineImageList"], "StayOnlineArea")
-            } else if (SETTINGS.Has("StayOnlineImage") && FileExist(SETTINGS["StayOnlineImage"])) {
-                finalStayCheck := SmartElementSearch(SETTINGS["StayOnlineImage"], "StayOnlineArea")
-            }
-            
-            if (finalStayCheck["found"])
-                cause := "StayOnlineStillVisible"
-            else
-                cause := "TargetStillMissingAfterDismiss"
-
-            if !STATE["isAlarmPlaying"] {
-                STATE["isAlarmPlaying"] := true
-                ShowLocalNotification("🚨 ALARM: Target Word NOT FOUND!")
-                details := Map(
-                    "Cause", cause,
-                    "Status", STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "N/A",
-                    "User Idle", (Floor(idleCombined / 60000)) . "m",
-                    "Battery", (STATE.Has("batteryPercent") ? STATE["batteryPercent"] : GetBatteryPercent()) . "%"
-                )
-                SendRichTelegramNotification("🚨 ALARM: Target Word Missing!", details)
-                SetTimer(AlarmBeep, 300)
-            }
-            return
-        }
-
-        try {
-            SaveTargetWordScreenshot("target_missing")
-        } catch {
-        }
-        if !STATE["isAlarmPlaying"] {
-            STATE["isAlarmPlaying"] := true
-            ShowLocalNotification("🚨 ALARM: Target Word NOT FOUND!")
-            details := Map(
-                "Cause", "TargetMissingNoStayOnline",
-                "Status", STATE.Has("onlineStatus") ? STATE["onlineStatus"] : "N/A",
-                "User Idle", (Floor(idleCombined / 60000)) . "m",
-                "Battery", (STATE.Has("batteryPercent") ? STATE["batteryPercent"] : GetBatteryPercent()) . "%"
-            )
-            SendRichTelegramNotification("🚨 ALARM: Target Word Missing!", details)
-            SetTimer(AlarmBeep, 300)
-        }
     } else {
-        if (STATE["isAlarmPlaying"]) {
-            STATE["isAlarmPlaying"] := false
-            SetTimer(AlarmBeep, 0)
-            STATE["lastUserActivity"] := A_TickCount + SETTINGS["WordMonitorUserIdleReset"]
-            Info("Alarm stopped - Target word found.")
+        ; إعادة تعيين جميع إنذارات Target Word عند العثور عليه
+        if (STATE.Has("targetMissingStartTime") && STATE["targetMissingStartTime"] != 0) {
+            Info("Target Word found - resetting all alarm states")
+            STATE["targetMissingStartTime"] := 0
+            STATE.Delete("targetMissingAlarmSent")
+            ; حذف جميع إنذارات الدقائق المتعددة
+            for key in STATE {
+                if (InStr(key, "targetMissing") && InStr(key, "minAlarm")) {
+                    STATE.Delete(key)
+                }
+            }
         }
     }
 }

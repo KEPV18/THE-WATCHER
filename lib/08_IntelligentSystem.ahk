@@ -496,3 +496,113 @@ UpdateSmartCoordinates(elementType, screenIndex, foundX, foundY) {
         SaveIntelligentCoordinates()
     }
 }
+
+; البحث التكيفي عن Target Word مع تكبير/تصغير الإحداثيات تدريجياً
+AdaptiveTargetSearch(imageList) {
+    global STATE, SETTINGS
+    
+    ; البحث في الإحداثيات الذكية أولاً
+    result := SmartElementSearch(imageList, "TargetArea")
+    if (result["found"]) {
+        return result
+    }
+    
+    Info("Target not found in smart coordinates, starting adaptive search...")
+    
+    ; البحث التدريجي مع تكبير المنطقة
+    for screenInfo in STATE["detectedScreens"] {
+        screenIndex := screenInfo["index"]
+        
+        ; الحصول على الإحداثيات الأساسية
+        baseCoords := GetSmartCoordinates("TargetArea", screenIndex)
+        
+        if (!baseCoords.Has("x1")) {
+            ; إذا لم توجد إحداثيات ذكية، استخدم منتصف الشاشة
+            centerX := screenInfo["left"] + (screenInfo["right"] - screenInfo["left"]) // 2
+            centerY := screenInfo["top"] + (screenInfo["bottom"] - screenInfo["top"]) // 2
+            baseCoords := Map(
+                "x1", centerX - 200,
+                "y1", centerY - 150,
+                "x2", centerX + 200,
+                "y2", centerY + 150
+            )
+        }
+        
+        ; البحث التدريجي مع زيادة المنطقة
+        expansionSteps := [0, 50, 100, 200, 400, 800]  ; خطوات التوسع
+        
+        for step in expansionSteps {
+            ; توسيع المنطقة
+            searchArea := Map(
+                "x1", Max(screenInfo["left"], baseCoords["x1"] - step),
+                "y1", Max(screenInfo["top"], baseCoords["y1"] - step),
+                "x2", Min(screenInfo["right"], baseCoords["x2"] + step),
+                "y2", Min(screenInfo["bottom"], baseCoords["y2"] + step)
+            )
+            
+            ; البحث في المنطقة الموسعة
+            local foundX, foundY
+            if (IsObject(imageList)) {
+                for imgPath in imageList {
+                    if (ReliableImageSearch(&foundX, &foundY, imgPath, searchArea)) {
+                        Info("Target found with expansion step: " . step . " on Screen " . screenIndex)
+                        ; تحديث الإحداثيات الذكية
+                        UpdateSmartCoordinates("TargetArea", screenIndex, foundX, foundY)
+                        return Map("found", true, "x", foundX, "y", foundY, "screen", screenIndex, "expansion", step)
+                    }
+                }
+            } else {
+                if (ReliableImageSearch(&foundX, &foundY, imageList, searchArea)) {
+                    Info("Target found with expansion step: " . step . " on Screen " . screenIndex)
+                    UpdateSmartCoordinates("TargetArea", screenIndex, foundX, foundY)
+                    return Map("found", true, "x", foundX, "y", foundY, "screen", screenIndex, "expansion", step)
+                }
+            }
+        }
+        
+        ; إذا لم يتم العثور عليه، جرب البحث في الشاشة كاملة مع تسامح أعلى
+        Info("Trying full screen search with higher tolerance on Screen " . screenIndex)
+        
+        ; حفظ التسامح الأصلي
+        originalTolerance := SETTINGS.Has("ImageSearchTolerance") ? SETTINGS["ImageSearchTolerance"] : 30
+        
+        ; جرب تسامح أعلى
+        toleranceSteps := [50, 70, 90]
+        for tolerance in toleranceSteps {
+            SETTINGS["ImageSearchTolerance"] := tolerance
+            
+            fullScreenArea := Map(
+                "x1", screenInfo["left"],
+                "y1", screenInfo["top"],
+                "x2", screenInfo["right"],
+                "y2", screenInfo["bottom"]
+            )
+            
+            local foundX, foundY
+            if (IsObject(imageList)) {
+                for imgPath in imageList {
+                    if (ReliableImageSearch(&foundX, &foundY, imgPath, fullScreenArea)) {
+                        Info("Target found with tolerance: " . tolerance . " on Screen " . screenIndex)
+                        ; استعادة التسامح الأصلي
+                        SETTINGS["ImageSearchTolerance"] := originalTolerance
+                        UpdateSmartCoordinates("TargetArea", screenIndex, foundX, foundY)
+                        return Map("found", true, "x", foundX, "y", foundY, "screen", screenIndex, "tolerance", tolerance)
+                    }
+                }
+            } else {
+                if (ReliableImageSearch(&foundX, &foundY, imageList, fullScreenArea)) {
+                    Info("Target found with tolerance: " . tolerance . " on Screen " . screenIndex)
+                    SETTINGS["ImageSearchTolerance"] := originalTolerance
+                    UpdateSmartCoordinates("TargetArea", screenIndex, foundX, foundY)
+                    return Map("found", true, "x", foundX, "y", foundY, "screen", screenIndex, "tolerance", tolerance)
+                }
+            }
+        }
+        
+        ; استعادة التسامح الأصلي
+        SETTINGS["ImageSearchTolerance"] := originalTolerance
+    }
+    
+    Warn("Target Word not found even with adaptive search across all screens")
+    return Map("found", false)
+}
