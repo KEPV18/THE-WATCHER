@@ -8,6 +8,13 @@ UpdateDashboardTimer(*) {
 
 UpdateDashboard() {
     global STATE, SETTINGS
+    
+    ; تأكد من تهيئة STATE إذا لم يكن موجوداً
+    if !IsSet(STATE) || !IsObject(STATE) {
+        STATE := Map()
+        Info("STATE object was not initialized in UpdateDashboard - reinitializing.")
+    }
+    
     if !IsObject(STATE) {
         Info("STATE object not ready for dashboard update.")
         return
@@ -219,6 +226,13 @@ ShowTooltipForScreen(text, tooltipId, tooltipX, tooltipY) {
 ; تبديل وضع الداشبورد: مضغوط/موسّع
 ^!d:: {
     global STATE
+    
+    ; تأكد من تهيئة STATE إذا لم يكن موجوداً
+    if !IsSet(STATE) || !IsObject(STATE) {
+        STATE := Map()
+        InitializeState()
+    }
+    
     if !IsObject(STATE) {
         InitializeState()
     }
@@ -227,6 +241,14 @@ ShowTooltipForScreen(text, tooltipId, tooltipX, tooltipY) {
 
 ~*CapsLock:: {
     global STATE, SETTINGS
+    
+    ; تأكد من تهيئة STATE إذا لم يكن موجوداً
+    if !IsSet(STATE) || !IsObject(STATE) {
+        STATE := Map()
+        InitializeState() ; Safety net
+        return
+    }
+    
     if !IsObject(STATE) {
         InitializeState() ; Safety net
         return

@@ -8,7 +8,8 @@ InitializeScript() {
     ; --- Load all settings from the .ini file ---
     LoadSettings()
     ; فرض القيم المطلوبة: فحص الحالة كل 5 ثوانٍ بعد بوابة الخمول، ورفع عتبة الخمول إلى دقيقتين
-    SETTINGS["StatusCheckInterval"] := 5000        ; فحص الحالة كل 5 ثوانٍ
+    SETTINGS["StatusCheckInterval"] := 1000        ; فحص الحالة كل ثانية
+    SETTINGS["MainLoopInterval"] := 1000           ; تكرار مراقبة Target Word كل ثانية
     SETTINGS["RefreshInterval"] := 60000           ; يظل كل دقيقة (نُبقيه كما هو حالياً)
     SETTINGS["UserIdleThreshold"] := 120000        ; عتبة خمول المستخدم = 120 ثانية
     SETTINGS["StayOnlineInterval"] := 120000       ; تحقق زر Stay Online كل دقيقتين

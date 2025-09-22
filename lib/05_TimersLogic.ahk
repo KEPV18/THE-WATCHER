@@ -7,8 +7,22 @@
 ; ============================================================
 StatusCheckTimer(*) {
     global SETTINGS, STATE
+    
+    ; تأكد من تهيئة STATE إذا لم يكن موجوداً
+    if !IsSet(STATE) || !IsObject(STATE) {
+        STATE := Map()
+        ; استخدام OutputDebug بدلاً من LogError لتجنب مشكلة التعريف
+        OutputDebug("STATE object was not initialized in StatusCheckTimer - reinitializing.")
+    }
+    
+    ; تأكد من تهيئة SETTINGS إذا لم يكن موجوداً
+    if !IsSet(SETTINGS) || !IsObject(SETTINGS) {
+        SETTINGS := Map()
+        OutputDebug("SETTINGS object was not initialized in StatusCheckTimer - reinitializing.")
+    }
+    
     if !IsObject(STATE) {
-        LogError("STATE object lost in StatusCheckTimer.")
+        OutputDebug("STATE object lost in StatusCheckTimer.")
         return
     }
     
@@ -20,11 +34,20 @@ StatusCheckTimer(*) {
     
     STATE["lastStatusCheckTime"] := A_TickCount
     STATE["lastStatusCheckTimestamp"] := FormatTime(A_Now, "HH:mm:ss")
+    
+    ; فحص إضافي للتأكد من وجود المفاتيح المطلوبة في SETTINGS
+    if !SETTINGS.Has("FrontlineWinTitle") {
+        OutputDebug("SETTINGS missing FrontlineWinTitle key")
+        return
+    }
+    
     if !WinExist(SETTINGS["FrontlineWinTitle"]) {
         if (STATE["frontlineStatus"] != "Missing") {
             STATE["frontlineStatus"] := "Missing"
             Info("Front Line window not found. Attempting to restart app.")
-            StartApp(SETTINGS["FrontlineShortcutName"], "frontlineStatus")
+            if SETTINGS.Has("FrontlineShortcutName") {
+                StartApp(SETTINGS["FrontlineShortcutName"], "frontlineStatus")
+            }
         }
         return
     }
@@ -36,15 +59,24 @@ StatusCheckTimer(*) {
 
     ; أولًا: تحقق من أي صورة ضمن صور Online المتعددة
     if (SETTINGS.Has("OnlineImageList") && SETTINGS["OnlineImageList"].Length > 0) {
-        searchResult := SmartElementSearch(SETTINGS["OnlineImageList"], "StatusArea")
-        if (searchResult["found"]) {
-            if (STATE["onlineStatus"] != "Online") {
-                Info("Status changed to: Online (Smart Detection)")
-                UpdateStatusDurations("Online")
-                STATE["onlineStatus"] := "Online"
-                STATE["offlineFixAttempts"] := 0
+        ; البحث في قائمة الصور باستخدام الإحداثيات الافتراضية
+        for imgPath in SETTINGS["OnlineImageList"] {
+            if (ReliableImageSearch(&foundX, &foundY, imgPath, statusArea)) {
+                if (STATE["onlineStatus"] != "Online") {
+                    Info("Status changed to: Online")
+                    UpdateStatusDurations("Online")
+                    STATE["onlineStatus"] := "Online"
+                    STATE["offlineFixAttempts"] := 0
+                }
+                ; إيقاف أي إنذار قيد التشغيل عند اكتشاف Online
+                if (STATE.Has("isAlarmPlaying") && STATE["isAlarmPlaying"]) {
+                    STATE["isAlarmPlaying"] := false
+                    SetTimer(AlarmBeep, 0)
+                    Info("Alarm stopped: Online status detected.")
+                }
+                knownStatusFound := true
+                break
             }
-            knownStatusFound := true
         }
     } else {
         if (ReliableImageSearch(&foundX, &foundY, SETTINGS["OnlineImage"], statusArea)) {
@@ -63,15 +95,18 @@ StatusCheckTimer(*) {
 
     ; ثانياً: اكتشاف حالة Coaching (لا نقوم بأي إجراء، فقط تحديث الحالة)
     if (SETTINGS.Has("CoachingImageList") && SETTINGS["CoachingImageList"].Length > 0) {
-        searchResult := SmartElementSearch(SETTINGS["CoachingImageList"], "StatusArea")
-        if (searchResult["found"]) {
-            if (STATE["onlineStatus"] != "Coaching") {
-                Info("Status changed to: Coaching (Smart Detection)")
-                UpdateStatusDurations("Coaching")
-                STATE["onlineStatus"] := "Coaching"
-                STATE["offlineFixAttempts"] := 0
+        ; البحث في قائمة الصور باستخدام الإحداثيات الافتراضية
+        for imgPath in SETTINGS["CoachingImageList"] {
+            if (ReliableImageSearch(&foundX, &foundY, imgPath, statusArea)) {
+                if (STATE["onlineStatus"] != "Coaching") {
+                    Info("Status changed to: Coaching")
+                    UpdateStatusDurations("Coaching")
+                    STATE["onlineStatus"] := "Coaching"
+                    STATE["offlineFixAttempts"] := 0
+                }
+                knownStatusFound := true
+                break
             }
-            knownStatusFound := true
         }
     } else if (SETTINGS.Has("CoachingImage") && FileExist(SETTINGS["CoachingImage"])) {
         if (ReliableImageSearch(&foundX, &foundY, SETTINGS["CoachingImage"], statusArea)) {
@@ -139,6 +174,9 @@ StatusCheckTimer(*) {
         UpdateStatusDurations("Unknown")
         STATE["onlineStatus"] := "Unknown"
         STATE["offlineFixAttempts"] := 0
+        
+        ; أخذ اسكرين شوت للحالة غير المعروفة بالمقاسات المختلفة
+        TakeStatusScreenshots()
     }
     Info("Attempting to save and send a screenshot for the 'Unknown' state...")
     screenshotResult := SaveStatusScreenshotEnhanced("unknown_status")
@@ -445,15 +483,29 @@ RefreshTimer(*) {
     }
     
     ; التحقق من وجود Target Word - إذا لم يوجد، نحتاج للريفريش!
-    targetResult := Map("found", false)
+    local targetFound := false, foundX, foundY
+    local targetArea := GetTargetArea()
+    if (!targetArea) {
+        OutputDebug("Cannot get target area for refresh check")
+        return
+    }
+    
     if (SETTINGS.Has("TargetImageList") && SETTINGS["TargetImageList"].Length > 0) {
-        targetResult := SmartElementSearch(SETTINGS["TargetImageList"], "TargetArea")
+        ; البحث في قائمة الصور باستخدام الإحداثيات الافتراضية
+        for imgPath in SETTINGS["TargetImageList"] {
+            if (ReliableImageSearch(&foundX, &foundY, imgPath, targetArea)) {
+                targetFound := true
+                break
+            }
+        }
     } else if (SETTINGS.Has("TargetImage") && FileExist(SETTINGS["TargetImage"])) {
-        targetResult := SmartElementSearch(SETTINGS["TargetImage"], "TargetArea")
+        if (ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], targetArea)) {
+            targetFound := true
+        }
     }
     
     ; إذا كان Target Word موجود، لا نحتاج للريفريش
-    if (targetResult["found"]) {
+    if (targetFound) {
         ; تحديث آخر مرة تم العثور على Target Word
         STATE["lastTargetFound"] := FormatTime(A_Now, "HH:mm:ss")
         Info("Refresh skipped: Target Word found - no refresh needed")
@@ -463,29 +515,45 @@ RefreshTimer(*) {
     ; إذا لم يوجد Target Word، نحتاج للريفريش لمحاولة إعادة تحميل الصفحة
     Info("Target Word not found - proceeding with refresh to reload page")
     
-    ; البحث الذكي عن Stay Online
-    stayOnlineResult := Map("found", false)
+    ; البحث عن Stay Online باستخدام الإحداثيات الافتراضية
+    local stayOnlineFound := false
+    local stayOnlineArea := Map("x1", SETTINGS["StayOnlineAreaTopLeftX"], "y1", SETTINGS["StayOnlineAreaTopLeftY"], "x2", SETTINGS["StayOnlineAreaBottomRightX"], "y2", SETTINGS["StayOnlineAreaBottomRightY"])
+    
     if (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0) {
-        stayOnlineResult := SmartElementSearch(SETTINGS["StayOnlineImageList"], "StayOnlineArea")
+        for imgPath in SETTINGS["StayOnlineImageList"] {
+            if (ReliableImageSearch(&foundX, &foundY, imgPath, stayOnlineArea)) {
+                stayOnlineFound := true
+                break
+            }
+        }
     } else if (SETTINGS.Has("StayOnlineImage") && FileExist(SETTINGS["StayOnlineImage"])) {
-        stayOnlineResult := SmartElementSearch(SETTINGS["StayOnlineImage"], "StayOnlineArea")
+        if (ReliableImageSearch(&foundX, &foundY, SETTINGS["StayOnlineImage"], stayOnlineArea)) {
+            stayOnlineFound := true
+        }
     }
     
-    if (stayOnlineResult["found"]) {
+    if (stayOnlineFound) {
         Info("Stay Online button found before refresh - clicking it first")
-        Click(stayOnlineResult["x"], stayOnlineResult["y"])
+        Click(foundX, foundY)
         STATE["synthInputUntil"] := A_TickCount + (SETTINGS.Has("ActivitySynthIgnoreMs") ? SETTINGS["ActivitySynthIgnoreMs"] : 2000)
         Sleep(1000)
         
         ; إعادة فحص Stay Online بعد النقر
-        stillVisibleResult := Map("found", false)
+        local stillVisible := false
         if (SETTINGS.Has("StayOnlineImageList") && SETTINGS["StayOnlineImageList"].Length > 0) {
-            stillVisibleResult := SmartElementSearch(SETTINGS["StayOnlineImageList"], "StayOnlineArea")
+            for imgPath in SETTINGS["StayOnlineImageList"] {
+                if (ReliableImageSearch(&foundX, &foundY, imgPath, stayOnlineArea)) {
+                    stillVisible := true
+                    break
+                }
+            }
         } else if (SETTINGS.Has("StayOnlineImage") && FileExist(SETTINGS["StayOnlineImage"])) {
-            stillVisibleResult := SmartElementSearch(SETTINGS["StayOnlineImage"], "StayOnlineArea")
+            if (ReliableImageSearch(&foundX, &foundY, SETTINGS["StayOnlineImage"], stayOnlineArea)) {
+                stillVisible := true
+            }
         }
         
-        if (stillVisibleResult["found"]) {
+        if (stillVisible) {
             Info("Stay Online window still visible after click - skipping refresh")
             return
         }
@@ -558,25 +626,46 @@ MonitorTargetTimer(*) {
         return
     }
 
-    ; استخدام النظام الذكي للبحث عن Target Word
-    local foundX, foundY
-    searchResult := Map("found", false)
-    
-    if (SETTINGS.Has("TargetImageList") && SETTINGS["TargetImageList"].Length > 0) {
-        searchResult := SmartElementSearch(SETTINGS["TargetImageList"], "TargetArea")
-    } else if (SETTINGS.Has("TargetImage") && FileExist(SETTINGS["TargetImage"])) {
-        searchResult := SmartElementSearch(SETTINGS["TargetImage"], "TargetArea")
+    ; استخدام الإحداثيات الافتراضية للبحث عن Target Word
+    local foundX, foundY, hasTarget := false
+    local targetArea := GetTargetArea()
+    if (!targetArea) {
+        OutputDebug("Cannot get target area for monitor check")
+        return
     }
     
-    hasTarget := searchResult["found"]
+    if (SETTINGS.Has("TargetImageList") && SETTINGS["TargetImageList"].Length > 0) {
+        for imgPath in SETTINGS["TargetImageList"] {
+            if (ReliableImageSearch(&foundX, &foundY, imgPath, targetArea)) {
+                hasTarget := true
+                break
+            }
+        }
+    } else if (SETTINGS.Has("TargetImage") && FileExist(SETTINGS["TargetImage"])) {
+        if (ReliableImageSearch(&foundX, &foundY, SETTINGS["TargetImage"], targetArea)) {
+            hasTarget := true
+        }
+    }
     
+    ; إذا لم يتم العثور على Target Word، أخذ اسكرين شوت للتارجت ورد بالمقاسات المختلفة
+    if (!hasTarget) {
+        TakeTargetScreenshots()
+    }
+
     ; تحديث آخر مرة تم التحقق من Target Word
     STATE["lastTargetCheck"] := FormatTime(A_Now, "HH:mm:ss")
     if (hasTarget) {
         STATE["lastTargetFound"] := FormatTime(A_Now, "HH:mm:ss")
         STATE["targetMissingStartTime"] := 0  ; إعادة تعيين عداد الاختفاء
+        
+        ; إيقاف إنذار التارجت عند عودته
+        if (STATE.Has("isAlarmPlaying") && STATE["isAlarmPlaying"]) {
+            STATE["isAlarmPlaying"] := false
+            SetTimer(AlarmBeep, 0)
+            Info("Alarm stopped: Target Word returned.")
+        }
     }
-    
+
     if (!hasTarget) {
         ; تتبع بداية اختفاء Target Word
         if (!STATE.Has("targetMissingStartTime") || STATE["targetMissingStartTime"] == 0) {
@@ -600,16 +689,27 @@ MonitorTargetTimer(*) {
             }
         }
         
-        ; إنذار إذا اختفى Target Word لأكثر من 5 دقائق
-        if (missingMinutes >= 5 && !STATE.Has("targetMissingAlarmSent")) {
+        ; إنذار فوري عند اختفاء Target Word
+        if (!STATE.Has("targetMissingAlarmSent")) {
             STATE["targetMissingAlarmSent"] := true
-            ShowLocalNotification("⚠️ Target Word missing for " . Round(missingMinutes, 1) . " minutes!")
-            QueueTelegram(Map("type", "text", "title", "⚠️ Target Word Missing Alert", 
-                           "details", Map("Duration", Round(missingMinutes, 1) . " minutes", 
-                                        "Last Found", STATE.Has("lastTargetFound") ? STATE["lastTargetFound"] : "Unknown",
-                                        "Action", "System will continue monitoring and refreshing")))
-            Warn("Target Word has been missing for " . Round(missingMinutes, 1) . " minutes")
+            STATE["isAlarmPlaying"] := true
+            
+            ; إنذار صوتي فوري
+            SetTimer(AlarmBeep, 500)
+            
+            ; إشعار محلي فوري
+            ShowLocalNotification("🚨 ALARM: Target Word DISAPPEARED!")
+            
+            ; إرسال إنذار تلغرام فوري
+            SendRichTelegramNotification("🚨 CRITICAL: Target Word Missing", 
+                Map("Status", "IMMEDIATE ALARM", 
+                    "Last Found", STATE.Has("lastTargetFound") ? STATE["lastTargetFound"] : "Unknown",
+                    "Action", "Manual intervention required!"))
+            
+            Info("CRITICAL ALARM: Target Word disappeared - immediate alarm triggered!")
         }
+        
+        Warn("Target Word has been missing for " . Round(missingMinutes, 1) . " minutes")
         
         ; إنذار إضافي كل 10 دقائق
         if (missingMinutes >= 10 && Mod(Floor(missingMinutes), 10) == 0 && !STATE.Has("targetMissing" . Floor(missingMinutes) . "minAlarm")) {
@@ -751,6 +851,13 @@ ClickStayOnlineButton() {
 UpdateStatusDurations(newStatus) {
     global STATE
     try {
+        ; تأكد من تهيئة STATE إذا لم يكن موجوداً
+        if !IsSet(STATE) || !IsObject(STATE) {
+            STATE := Map()
+            STATE["statusDurations"] := Map()
+            return
+        }
+        
         if !IsObject(STATE) || !STATE.Has("statusDurations")
             return
         nowTick := A_TickCount
@@ -954,4 +1061,164 @@ AlarmBeep(*) {
         return
     }
     SoundBeep(SETTINGS["BeepFrequency"], SETTINGS["BeepDuration"])
+}
+
+; دالة لأخذ اسكرين شوت للتارجت ورد بالمقاسات المختلفة
+TakeTargetScreenshots() {
+    global SETTINGS, STATE
+    
+    ; إنشاء مجلد الاسكرين شوت إذا لم يكن موجوداً
+    screenshotDir := A_ScriptDir "\screenshots"
+    if (!DirExist(screenshotDir)) {
+        DirCreate(screenshotDir)
+    }
+    
+    ; الحصول على الوقت الحالي لتسمية الملفات
+    timestamp := FormatTime(A_Now, "yyyy-MM-dd_HH-mm-ss")
+    
+    ; الحصول على منطقة التارجت الافتراضية
+    targetArea := GetTargetArea()
+    if (!targetArea) {
+        Warn("Cannot take screenshots: Target area not defined")
+        return
+    }
+    
+    ; أخذ اسكرين شوت بالمقاس الافتراضي
+    defaultFile := screenshotDir "\target_default_" . timestamp . ".png"
+    TakeAreaScreenshot(targetArea["x1"], targetArea["y1"], 
+                      targetArea["x2"] - targetArea["x1"], 
+                      targetArea["y2"] - targetArea["y1"], defaultFile)
+    
+    ; أخذ اسكرين شوت بالمقاس الموسع (زيادة 50 بكسل من كل جانب)
+    expandedFile := screenshotDir "\target_expanded_" . timestamp . ".png"
+    expandedX1 := Max(0, targetArea["x1"] - 50)
+    expandedY1 := Max(0, targetArea["y1"] - 50)
+    expandedWidth := (targetArea["x2"] - targetArea["x1"]) + 100
+    expandedHeight := (targetArea["y2"] - targetArea["y1"]) + 100
+    TakeAreaScreenshot(expandedX1, expandedY1, expandedWidth, expandedHeight, expandedFile)
+    
+    ; أخذ اسكرين شوت بالمقاس الضيق (تقليل 30 بكسل من كل جانب)
+    narrowFile := screenshotDir "\target_narrow_" . timestamp . ".png"
+    narrowX1 := targetArea["x1"] + 30
+    narrowY1 := targetArea["y1"] + 30
+    narrowWidth := Max(50, (targetArea["x2"] - targetArea["x1"]) - 60)
+    narrowHeight := Max(50, (targetArea["y2"] - targetArea["y1"]) - 60)
+    TakeAreaScreenshot(narrowX1, narrowY1, narrowWidth, narrowHeight, narrowFile)
+    
+    Info("Target screenshots taken: " . timestamp)
+}
+
+; دالة لأخذ اسكرين شوت لمنطقة محددة
+TakeAreaScreenshot(x, y, width, height, filename) {
+    try {
+        ; استخدام GDI+ لأخذ اسكرين شوت
+        pBitmap := Gdip_BitmapFromScreen(x "|" y "|" width "|" height)
+        if (pBitmap) {
+            Gdip_SaveBitmapToFile(pBitmap, filename)
+            Gdip_DisposeImage(pBitmap)
+        }
+    } catch as e {
+        Warn("Failed to take screenshot: " . e.message)
+    }
+}
+
+; دالة للحصول على منطقة التارجت الافتراضية
+GetTargetArea() {
+    global SETTINGS, STATE
+    
+    ; محاولة الحصول على منطقة التارجت من الإعدادات
+    if (SETTINGS.Has("TargetArea")) {
+        return SETTINGS["TargetArea"]
+    }
+    
+    ; إذا لم تكن محددة، استخدام منطقة افتراضية بناءً على الشاشة الأولى
+    try {
+        MonitorGet(1, &left, &top, &right, &bottom)
+        ; منطقة افتراضية في وسط الشاشة
+        centerX := left + (right - left) / 2
+        centerY := top + (bottom - top) / 2
+        return Map(
+            "x1", centerX - 200,
+            "y1", centerY - 150,
+            "x2", centerX + 200,
+            "y2", centerY + 150
+        )
+    } catch {
+        ; منطقة افتراضية ثابتة كحل أخير
+        return Map(
+            "x1", 300,
+            "y1", 200,
+            "x2", 700,
+            "y2", 500
+        )
+    }
+}
+
+; دالة لأخذ اسكرين شوت للحالة بالمقاسات المختلفة
+TakeStatusScreenshots() {
+    global SETTINGS
+    
+    ; إنشاء مجلد للاسكرين شوت
+    screenshotDir := A_ScriptDir "\screenshots\status_unknown"
+    if (!DirExist(screenshotDir)) {
+        DirCreate(screenshotDir)
+    }
+    
+    ; الحصول على منطقة الحالة
+    statusArea := GetStatusArea()
+    timestamp := FormatTime(A_Now, "yyyyMMdd_HHmmss")
+    
+    ; اسكرين شوت بالمقاس الافتراضي
+    defaultFile := screenshotDir "\status_default_" . timestamp . ".png"
+    TakeAreaScreenshot(statusArea["x1"], statusArea["y1"], 
+                      statusArea["x2"] - statusArea["x1"], 
+                      statusArea["y2"] - statusArea["y1"], defaultFile)
+    
+    ; اسكرين شوت بالمقاس الموسع (زيادة 50 بكسل من كل جهة)
+    expandedFile := screenshotDir "\status_expanded_" . timestamp . ".png"
+    expandedX1 := statusArea["x1"] - 50
+    expandedY1 := statusArea["y1"] - 50
+    expandedWidth := (statusArea["x2"] - statusArea["x1"]) + 100
+    expandedHeight := (statusArea["y2"] - statusArea["y1"]) + 100
+    TakeAreaScreenshot(expandedX1, expandedY1, expandedWidth, expandedHeight, expandedFile)
+    
+    ; اسكرين شوت بالمقاس الضيق (تقليل 20 بكسل من كل جهة)
+    narrowFile := screenshotDir "\status_narrow_" . timestamp . ".png"
+    narrowX1 := statusArea["x1"] + 20
+    narrowY1 := statusArea["y1"] + 20
+    narrowWidth := Max(50, (statusArea["x2"] - statusArea["x1"]) - 40)
+    narrowHeight := Max(50, (statusArea["y2"] - statusArea["y1"]) - 40)
+    TakeAreaScreenshot(narrowX1, narrowY1, narrowWidth, narrowHeight, narrowFile)
+    
+    Info("Status screenshots taken: " . timestamp)
+}
+
+; دالة للحصول على منطقة الحالة الافتراضية
+GetStatusArea() {
+    global SETTINGS, STATE
+    
+    ; محاولة الحصول على منطقة الحالة من الإعدادات
+    if (SETTINGS.Has("StatusArea")) {
+        return SETTINGS["StatusArea"]
+    }
+    
+    ; إذا لم تكن محددة، استخدام منطقة افتراضية بناءً على الشاشة الأولى
+    try {
+        MonitorGet(1, &left, &top, &right, &bottom)
+        ; منطقة افتراضية في أعلى يسار الشاشة
+        return Map(
+            "x1", left + 50,
+            "y1", top + 50,
+            "x2", left + 300,
+            "y2", top + 150
+        )
+    } catch {
+        ; منطقة افتراضية ثابتة كحل أخير
+        return Map(
+            "x1", 50,
+            "y1", 50,
+            "x2", 300,
+            "y2", 150
+        )
+    }
 }
