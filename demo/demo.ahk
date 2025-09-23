@@ -1,9 +1,10 @@
 ; ============================================================
 ;                      Demo - Ultra-Light Watcher
-;                Single File Version (v1.2 - Corrected)
+;           Single File Version (v1.6 - Final Syntax Fix)
 ; ============================================================
-; هذا السكريبت مصمم ليكون خفيفاً وموثوقاً، ويعتمد على مراقبة
-; لون بكسل محدد بدلاً من البحث المكلف عن الصور.
+; - تم إصلاح جميع أخطاء بناء الجملة الناتجة عن ضغط الأكواد.
+; - تم إصلاح مشكلة إعادة تشغيل الإنذار فوراً بعد إيقافه.
+; - عند الضغط على أي زر أثناء الإنذار، يتم كتم الصوت لمدة دقيقتين.
 ; ============================================================
 
 #Requires AutoHotkey v2.0
@@ -11,46 +12,39 @@
 Persistent
 
 ; ============================================================
-; 1. الإعدادات الثابتة (عدّل هذه القيم لتناسب جهازك)
+; 1. الإعدادات الثابتة
 ; ============================================================
 global SETTINGS := Map(
-    ; --- إعدادات أساسية ---
     "FrontlineWinTitle", "Front Line",
-
-    ; --- مراقبة البكسل (أهم جزء) ---
-    "TargetPixelX", 949,
-    "TargetPixelY", 542,
-    "TargetPixelColor", 0xE9F7FF, ; اللون بصيغة BGR كما يظهر في WinSpy
-
-    ; --- إحداثيات النقرات "العمياء" ---
+    "TargetPixelX", 949, "TargetPixelY", 542, "TargetPixelColor", 0xE9F7FF,
     "RefreshX", 114, "RefreshY", 73,
     "StayOnlineAreaX1", 1155, "StayOnlineAreaY1", 655, "StayOnlineAreaX2", 1300, "StayOnlineAreaY2", 707,
     "FixStep1X", 140, "FixStep1Y", 994,
     "FixStep2X", 156, "FixStep2Y", 845,
     "FixStep3X", 328, "FixStep3Y", 323,
-
-    ; --- إعدادات Telegram (مهم جداً) ---
     "TelegramBotToken", "8328100113:AAEEtm8w7Em7eqSVSjq8yiG5nPu7JNBz9Nk",
     "TelegramChatId", "5670001305",
-
-    ; --- التوقيتات (بالمللي ثانية) ---
-    "UserIdleThreshold", 120000,      ; 2 دقيقة: مدة الخمول (كيبورد فقط) لبدء الإجراءات
-    "RefreshInterval", 300000,         ; 5 دقائق: الفاصل بين كل عملية Refresh
-    "StayOnlineInterval", 120000,      ; 2 دقيقة: الفاصل بين كل نقرة على Stay Online
-    "PeriodicFixInterval", 600000,     ; 10 دقائق: الفاصل بين كل تنفيذ لخطوات الإصلاح
-    "TelegramReportInterval", 600000,  ; 10 دقائق: الفاصل بين كل تقرير لـ Telegram
-    "PixelCheckInterval", 1000         ; 1 ثانية: سرعة مراقبة البكسل
+    "UserIdleThreshold", 120000,
+    "RefreshInterval", 300000,
+    "StayOnlineInterval", 120000,
+    "PeriodicFixInterval", 600000,
+    "TelegramReportInterval", 600000,
+    "PixelCheckInterval", 1000,
+    "StartupGracePeriod", 10000,
+    "AlarmMuteDuration", 120000
 )
 
 ; ============================================================
-; 2. متغيرات الحالة العامة (لا تعدل هذه)
+; 2. متغيرات الحالة العامة
 ; ============================================================
 global STATE := Map(
     "isAlarmPlaying", false,
     "frontlineWinId", 0,
     "lastAction", "None",
     "lastActionTime", "",
-    "isUserIdle", false
+    "isUserIdle", false,
+    "monitoringActive", false,
+    "alarmMutedUntil", 0
 )
 
 ; ============================================================
@@ -59,57 +53,51 @@ global STATE := Map(
 Initialize()
 
 Initialize() {
-    ; ضبط إعدادات AHK الأساسية
     CoordMode "Pixel", "Screen"
     CoordMode "Mouse", "Screen"
     SetDefaultMouseSpeed 0
 
-    ; إرسال إشعار بدء التشغيل
+    Log("--- Script Initializing ---")
     SendTelegram("✅ **Script Started**`n`nDemo Watcher is now running at " . FormatTime(A_Now, "HH:mm:ss dd-MM-yyyy"))
-
-    ; إعداد مؤقت للبحث عن نافذة Frontline
     SetTimer(FindFrontlineWindow, 1000)
-
-    ; إعداد روتين الخروج الآمن
     OnExit(SafeExit)
 }
 
 FindFrontlineWindow() {
-    ; محاولة العثور على النافذة
     winId := WinExist(SETTINGS["FrontlineWinTitle"])
     if (winId) {
-        ; تم العثور على النافذة
         if (STATE["frontlineWinId"] = 0) {
-            ; هذه هي المرة الأولى التي نجد فيها النافذة
+            Log("Front Line window found. ID: " . winId)
             STATE["frontlineWinId"] := winId
-            SendTelegram("🟢 **Front Line Window Found**`n`nMonitoring has now started.")
-            
-            ; تفعيل جميع المؤقتات الأخرى الآن
-            SetTimer(MonitorTargetPixel, SETTINGS["PixelCheckInterval"])
-            SetTimer(CheckIdleAndAct, 1000) ; مؤقت للتحقق من الخمول واتخاذ الإجراءات
-            SetTimer(SendPeriodicReport, SETTINGS["TelegramReportInterval"])
+            SendTelegram("🟢 **Front Line Window Found**`n`nMonitoring will start after a " . (SETTINGS["StartupGracePeriod"]/1000) . "-second grace period.")
+            SetTimer(ActivateMonitoring, -SETTINGS["StartupGracePeriod"])
         }
     } else {
-        ; لم يتم العثور على النافذة
         if (STATE["frontlineWinId"] != 0) {
-            ; النافذة كانت موجودة واختفت
+            Log("Front Line window lost.")
             SendTelegram("🔴 **Front Line Window Lost**`n`nMonitoring paused. Will attempt to relaunch.")
             STATE["frontlineWinId"] := 0
-            ; إيقاف المؤقتات الرئيسية
+            STATE["monitoringActive"] := false
             SetTimer(MonitorTargetPixel, 0)
             SetTimer(CheckIdleAndAct, 0)
             SetTimer(SendPeriodicReport, 0)
         }
-        ; محاولة إعادة تشغيل التطبيق
         TryLaunchFrontline()
     }
 }
 
+ActivateMonitoring() {
+    Log("Grace period ended. Activating full monitoring.")
+    STATE["monitoringActive"] := true
+    SetTimer(MonitorTargetPixel, SETTINGS["PixelCheckInterval"])
+    SetTimer(CheckIdleAndAct, 1000)
+    SetTimer(SendPeriodicReport, SETTINGS["TelegramReportInterval"])
+}
+
 TryLaunchFrontline() {
-    ; مسارات محتملة للاختصار
+    Log("Attempting to launch Front Line shortcut.")
     shortcutPath1 := A_Desktop . "\" . "Front Line" . ".lnk"
     shortcutPath2 := A_DesktopCommon . "\" . "Front Line" . ".lnk"
-
     if (FileExist(shortcutPath1)) {
         Run(shortcutPath1)
     } else if (FileExist(shortcutPath2)) {
@@ -120,39 +108,25 @@ TryLaunchFrontline() {
 ; ============================================================
 ; 4. المنطق الرئيسي والمؤقتات
 ; ============================================================
-
-; مؤقت واحد لإدارة جميع الإجراءات المعتمدة على الخمول
 CheckIdleAndAct() {
-    static lastRefresh := A_TickCount
-    static lastStayOnline := A_TickCount
-    static lastPeriodicFix := A_TickCount
-
-    ; التحقق من خمول المستخدم (كيبورد فقط)
-    STATE["isUserIdle"] := (A_TimeIdleKeyboard > SETTINGS["UserIdleThreshold"])
-
-    if (!STATE["isUserIdle"]) {
-        ; إذا عاد المستخدم للنشاط، أعد ضبط المؤقتات
-        lastRefresh := A_TickCount
-        lastStayOnline := A_TickCount
-        lastPeriodicFix := A_TickCount
+    if (!STATE["monitoringActive"]) {
         return
     }
-
-    ; --- تنفيذ الإجراءات فقط في حالة الخمول ---
-
-    ; 1. نقرة Stay Online
+    STATE["isUserIdle"] := (A_TimeIdleKeyboard > SETTINGS["UserIdleThreshold"])
+    if (!STATE["isUserIdle"]) {
+        return
+    }
+    
+    static lastRefresh := A_TickCount, lastStayOnline := A_TickCount, lastPeriodicFix := A_TickCount
+    
     if (A_TickCount - lastStayOnline > SETTINGS["StayOnlineInterval"]) {
         PerformStayOnlineClick()
         lastStayOnline := A_TickCount
     }
-
-    ; 2. نقرة Refresh
     if (A_TickCount - lastRefresh > SETTINGS["RefreshInterval"]) {
         PerformRefresh()
         lastRefresh := A_TickCount
     }
-
-    ; 3. خطوات الإصلاح الدورية
     if (A_TickCount - lastPeriodicFix > SETTINGS["PeriodicFixInterval"]) {
         PerformPeriodicFix()
         lastPeriodicFix := A_TickCount
@@ -160,28 +134,35 @@ CheckIdleAndAct() {
 }
 
 MonitorTargetPixel() {
-    if (STATE["isAlarmPlaying"])
-        return ; لا تفعل شيئاً إذا كان المنبه يعمل بالفعل
+    if (!STATE["monitoringActive"] || STATE["isAlarmPlaying"]) {
+        return
+    }
+    if (!WinActive("ahk_id " . STATE["frontlineWinId"])) {
+        return
+    }
 
     currentColor := PixelGetColor(SETTINGS["TargetPixelX"], SETTINGS["TargetPixelY"])
-
     if (currentColor != SETTINGS["TargetPixelColor"]) {
-        ; اللون تغير، انتظر وتحقق مرة أخرى
+        Log("Target pixel color mismatch. Verifying...")
         Sleep(3000)
-
-        ; إجراء وقائي: انقر على مكان Stay Online
         PerformStayOnlineClick()
-        Sleep(500) ; انتظر قليلاً بعد النقرة
+        Sleep(500)
 
-        ; تحقق مرة أخيرة
         finalColor := PixelGetColor(SETTINGS["TargetPixelX"], SETTINGS["TargetPixelY"])
         if (finalColor != SETTINGS["TargetPixelColor"]) {
-            ; اللون لا يزال خاطئاً، شغل المنبه
-            STATE["isAlarmPlaying"] := true
-            SetTimer(AlarmBeep, 500) ; تشغيل صوت التنبيه كل نصف ثانية
-            SendTelegram("🚨 **ALARM: Target Pixel Changed!**`n`nPixel color at (" . SETTINGS["TargetPixelX"] . "," . SETTINGS["TargetPixelY"] . ") is incorrect.`nManual intervention may be required.")
-            STATE["lastAction"] := "ALARM TRIGGERED"
-            STATE["lastActionTime"] := FormatTime(A_Now, "HH:mm:ss")
+            isMuted := (A_TickCount < STATE["alarmMutedUntil"])
+            if (!isMuted) {
+                Log("Verification failed. Triggering ALARM.")
+                STATE["isAlarmPlaying"] := true
+                SetTimer(AlarmBeep, 500)
+                SendTelegram("🚨 **ALARM: Target Pixel Changed!**`n`nManual intervention may be required. Press any key to mute for 2 minutes.")
+                STATE["lastAction"] := "ALARM TRIGGERED"
+                STATE["lastActionTime"] := FormatTime(A_Now, "HH:mm:ss")
+            } else {
+                Log("Verification failed, but alarm is currently muted.")
+            }
+        } else {
+            Log("Pixel color corrected after verification. Alarm averted.")
         }
     }
 }
@@ -189,24 +170,27 @@ MonitorTargetPixel() {
 ; ============================================================
 ; 5. دوال الإجراءات
 ; ============================================================
-
 PerformStayOnlineClick() {
-    ; نقرة عشوائية داخل منطقة Stay Online (باستخدام الصيغة الصحيحة لـ Random في v2)
+    Log("Performing enhanced Stay Online click (3 attempts).")
     local randX := Random(SETTINGS["StayOnlineAreaX1"], SETTINGS["StayOnlineAreaX2"])
     local randY := Random(SETTINGS["StayOnlineAreaY1"], SETTINGS["StayOnlineAreaY2"])
-    
-    Click(randX, randY)
+    Loop 3 {
+        Click(randX, randY)
+        Sleep(50)
+    }
     STATE["lastAction"] := "Stay Online Click"
     STATE["lastActionTime"] := FormatTime(A_Now, "HH:mm:ss")
 }
 
 PerformRefresh() {
+    Log("Performing Refresh click.")
     Click(SETTINGS["RefreshX"], SETTINGS["RefreshY"])
     STATE["lastAction"] := "Refresh Click"
     STATE["lastActionTime"] := FormatTime(A_Now, "HH:mm:ss")
 }
 
 PerformPeriodicFix() {
+    Log("Performing periodic 3-step fix.")
     Click(SETTINGS["FixStep1X"], SETTINGS["FixStep1Y"])
     Sleep(1500)
     Click(SETTINGS["FixStep2X"], SETTINGS["FixStep2Y"])
@@ -218,78 +202,70 @@ PerformPeriodicFix() {
 }
 
 AlarmBeep() {
-    SoundBeep(800, 400) ; تردد 800 هرتز لمدة 400 مللي ثانية
+    SoundBeep(800, 400)
 }
 
 ; ============================================================
-; 6. التقارير والتواصل عبر Telegram
+; 6. التقارير والتواصل
 ; ============================================================
-
 SendPeriodicReport() {
-    ; جمع معلومات البطارية
-    batteryPercent := "N/A"
-    chargerStatus := "Unknown"
+    if (!STATE["monitoringActive"]) {
+        return
+    }
+    Log("Sending periodic report to Telegram.")
+    batteryPercent := "N/A", chargerStatus := "Unknown"
     try {
         powerStatus := Buffer(12, 0)
         if DllCall("GetSystemPowerStatus", "Ptr", powerStatus) {
             batteryPercent := NumGet(powerStatus, 2, "UChar") . "%"
-            acLineStatus := NumGet(powerStatus, 1, "UChar")
-            chargerStatus := (acLineStatus = 1) ? "Plugged In" : "On Battery"
+            chargerStatus := (NumGet(powerStatus, 1, "UChar") = 1) ? "Plugged In" : "On Battery"
         }
     }
-
-    ; تحديد الحالة العامة
-    currentStatus := "Monitoring"
-    if (STATE["isAlarmPlaying"]) {
+    currentStatus := "Unknown"
+    if (A_TickCount < STATE["alarmMutedUntil"]) {
+        currentStatus := "ALARM MUTED"
+    } else if (STATE["isAlarmPlaying"]) {
         currentStatus := "ALARM ACTIVE"
-    } else if (STATE["isUserIdle"]) {
-        currentStatus := "Monitoring (User Idle)"
     } else {
-        currentStatus := "Monitoring (User Active)"
+        currentStatus := STATE["isUserIdle"] ? "Monitoring (User Idle)" : "Monitoring (User Active)"
     }
-
-    ; بناء نص الرسالة
     report := "📊 **Periodic Status Report**`n`n"
     report .= "🔹 **Status:** " . currentStatus . "`n"
     report .= "🔋 **Battery:** " . batteryPercent . " (" . chargerStatus . ")`n"
     report .= "⏰ **Last Action:** " . STATE["lastAction"] . " at " . STATE["lastActionTime"] . "`n"
     report .= "🕒 **Report Time:** " . FormatTime(A_Now, "HH:mm:ss")
-
     SendTelegram(report)
 }
 
 SendTelegram(message) {
-    if (SETTINGS["TelegramBotToken"] = "YOUR_TOKEN" || SETTINGS["TelegramChatId"] = "YOUR_CHAT_ID")
-        return ; لا ترسل إذا لم يتم تكوين الإعدادات
-
-    ; ترميز الرسالة لإرسالها في URL
+    Log("Attempting to send Telegram message...")
+    if (SETTINGS["TelegramBotToken"] = "YOUR_TOKEN" || SETTINGS["TelegramChatId"] = "YOUR_CHAT_ID") {
+        Log("Telegram send skipped: Token/ChatID not configured.")
+        return
+    }
     encodedMessage := UriEncode(message)
-    
     url := "https://api.telegram.org/bot" . SETTINGS["TelegramBotToken"] . "/sendMessage"
     postBody := "chat_id=" . SETTINGS["TelegramChatId"] . "&text=" . encodedMessage . "&parse_mode=Markdown"
-
     try {
         req := ComObject("WinHttp.WinHttpRequest.5.1" )
-        req.Open("POST", url, true) ; true = async
+        req.Open("POST", url, true)
         req.SetRequestHeader("Content-Type", "application/x-www-form-urlencoded")
-        req.SetTimeouts(5000, 5000, 5000, 5000) ; 5 ثواني مهلة
+        req.SetTimeouts(5000, 5000, 5000, 5000)
         req.Send(postBody)
+        Log("Telegram request sent.")
     } catch {
-        ; فشل في الإرسال، يمكن إضافة تسجيل خطأ هنا إذا أردت
+        Log("Error: Failed to send Telegram request.")
     }
 }
 
-; دالة مساعدة لترميز URL (نسخة مصححة)
 UriEncode(str, encoding := "UTF-8") {
     static chars := "0123456789ABCDEF"
     if (str = "") {
         return ""
     }
-    
     bytes := StrPut(str, encoding) - 1
     buf := Buffer(bytes)
     StrPut(str, buf, encoding)
-    
     result := ""
     Loop bytes {
         c := NumGet(buf, A_Index - 1, "UChar")
@@ -302,29 +278,33 @@ UriEncode(str, encoding := "UTF-8") {
     return result
 }
 
+Log(message) {
+    try FileAppend("[" . FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") . "] " . message . "`n", "Demo_Log.txt", "UTF-8")
+}
+
 ; ============================================================
 ; 7. الاختصارات والخروج الآمن
 ; ============================================================
-
-; CapsLock أو أي ضغطة كيبورد توقف المنبه
 #HotIf STATE["isAlarmPlaying"]
 ~*::
 {
+    Log("User activity detected. Muting alarm for 2 minutes.")
     STATE["isAlarmPlaying"] := false
-    SetTimer(AlarmBeep, 0) ; إيقاف المنبه الصوتي
-    SendTelegram("✅ **Alarm Stopped**`n`nUser activity detected. Alarm has been silenced.")
-    STATE["lastAction"] := "Alarm Stopped by User"
+    SetTimer(AlarmBeep, 0)
+    STATE["alarmMutedUntil"] := A_TickCount + SETTINGS["AlarmMuteDuration"]
+    SendTelegram("🔇 **Alarm Muted**`n`nAlarm has been silenced for 2 minutes due to user activity.")
+    STATE["lastAction"] := "Alarm Muted by User"
     STATE["lastActionTime"] := FormatTime(A_Now, "HH:mm:ss")
 }
 #HotIf
 
-; اختصار الخروج الآمن
 F12::SafeExit()
 
 SafeExit(*) {
+    Log("--- Script Shutting Down ---")
     SendTelegram("⛔ **Script Shutting Down**`n`nFinal report will be sent shortly.")
-    Sleep(1000) ; انتظر ثانية لضمان إرسال الرسالة
-    SendPeriodicReport() ; إرسال تقرير أخير
+    Sleep(1000)
+    SendPeriodicReport()
     Sleep(1000)
     ExitApp()
 }

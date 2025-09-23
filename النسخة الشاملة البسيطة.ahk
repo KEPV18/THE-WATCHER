@@ -1,116 +1,162 @@
-#NoEnv
+#Requires AutoHotkey v2.0
 #SingleInstance Force
-#Persistent
-SetBatchLines, -1
-SetWorkingDir, %A_ScriptDir%
-CoordMode, Pixel, Screen
-CoordMode, Mouse, Screen
-SetTitleMatchMode, 2
+; (أُزيلت #Persistent لأنها غير مدعومة في v2)
+SetWorkingDir(A_ScriptDir)
+CoordMode("Pixel", "Screen")
+CoordMode("Mouse", "Screen")
+SetTitleMatchMode(2)
 
-; النسخة الشاملة البسيطة: مراقبة الحالة والتارجت ورد مع إنذار وتصحيح بسيط بدون انتظار مبدئي
+; النسخة الشاملة البسيطة (إصدار AHK v2):
+; - هيكلية بالدوال بدون Labels/GoSub
+; - الاعتماد الأساسي على فحص البكسل بدل الصور (صور اختيارية)
+; - لقطات شاشة عبر GDI+ مباشرة بدون MSPaint
+; - تكامل نصي بسيط مع Telegram
+; - خيار إيقاف العمل أثناء نشاط المستخدم لتجنّب التعارض
 
-; إعدادات عامة
-global LOG_FILE := A_ScriptDir "\log_simple.txt"
-global SCREENSHOT_DIR := A_ScriptDir "\logs\simple_screenshots"
+; إعدادات عامة ومسارات
+logFile := A_ScriptDir "\log_simple_v2.txt"
+screenshotDir := A_ScriptDir "\logs\simple_screenshots"
+DirCreate(screenshotDir)
 
-; إحداثيات الأزرار (عدّلها حسب شاشتك)
-; مكان زر Stay Online
-global STAY_ONLINE_X := 114
-global STAY_ONLINE_Y := 73
-; مكان زر Refresh
-global REFRESH_X := 114
-global REFRESH_Y := 73
-; نقطة تفحص الحالة (لون/صورة)
-global STATUS_X := 114
-global STATUS_Y := 73
-; لون الحالة أوفلاين (عدّله حسب الواجهة)
-global OFFLINE_COLOR := 0x000000  ; لون افتراضي، غيّره حسب الحاجة
+; إعدادات قابلة للتعديل (بدون settings.ini)
+config := Map()
+config["STAY_ONLINE_X"] := 114
+config["STAY_ONLINE_Y"] := 73
+config["REFRESH_X"] := 114
+config["REFRESH_Y"] := 73
+config["STATUS_X"] := 114
+config["STATUS_Y"] := 73
+config["STATUS_COLOR_OFFLINE"] := 0x000000  ; عدّل اللون حسب واجهتك
 
-; صور الحالة والتارجت (إن وجدت)
-global ONLINE_IMAGES := [A_ScriptDir "\profiles\status_online.png", A_ScriptDir "\profiles\status_coaching.png"]
-global OFFLINE_IMAGES := [A_ScriptDir "\profiles\status_offline.png"]
-global TARGET_IMAGE := A_ScriptDir "\profiles\target_word.png"
+; منطقة فحص التارجت (بالإحداثيات)
+config["TARGET_X1"] := 0
+config["TARGET_Y1"] := 800
+config["TARGET_X2"] := A_ScreenWidth
+config["TARGET_Y2"] := A_ScreenHeight
 
-; منطقة البحث عن التارجت ورد (عدّل حسب مكانه)
-global TARGET_X1 := 0
-global TARGET_Y1 := 800
-global TARGET_X2 := A_ScreenWidth
-global TARGET_Y2 := A_ScreenHeight
+; طريقة فحص التارجت
+config["TARGET_BY_PIXEL"] := true               ; اجعلها true للاعتماد على PixelSearch
+config["TARGET_COLOR"] := 0xFFFFFF              ; لون مرجعي للتارجت (عدّله)
+config["TARGET_COLOR_VAR"] := 10                ; سماحية اختلاف اللون في PixelSearch
+config["USE_IMAGES_STATUS"] := false            ; صور الحالة اختيارية
+config["USE_IMAGES_TARGET"] := false            ; صور التارجت اختيارية
+config["IMG_TOL"] := 120                        ; تحمل البحث بالصور إن تم تفعيله
 
-; حالات الإنذار
-global isNetAlarmPlaying := false
-global isTargetAlarmPlaying := false
-global isAlarmPlaying := false
-global muteAlarm := false
-global targetRetryScheduled := false
+; أزمنة التشغيل
+config["STAY_ONLINE_INTERVAL"] := 90000         ; 90 ثانية
+config["STATUS_CHECK_INTERVAL"] := 1000         ; 1 ثانية
+config["TARGET_CHECK_INTERVAL"] := 1000         ; 1 ثانية
+config["TARGET_RETRY_MS"] := 3000               ; 3 ثواني
+config["POST_REFRESH_DELAY"] := 800             ; مهلة بعد الضغط على تحديث
 
-; مؤقتات
-SetTimer, StayOnlineClickTimer, 90000       ; اضغط ستاي أونلاين + ريفريش كل دقيقة ونصف
-SetTimer, StatusCheckTimer, 1000            ; راقب الحالة كل ثانية
-SetTimer, TargetMonitorTimer, 1000          ; راقب التارجت ورد كل ثانية
-SetTimer, AlarmBeep, Off                    ; إيقاف إنذار الصوت مبدئياً
+; إيقاف العمل أثناء نشاط المستخدم
+config["PAUSE_WHEN_ACTIVE"] := true             ; أوقف أثناء النشاط الحقيقي
+config["IDLE_THRESHOLD_MS"] := 5000             ; اعتبر المستخدم نشطاً إن كان الخمول أقل من 5 ثوان
 
-Log("[START] النسخة الشاملة البسيطة بدأت فوراً بدون انتظار")
-FileCreateDir, %SCREENSHOT_DIR%
+; تكامل Telegram (نصي فقط الآن)
+config["TELEGRAM_BOT_TOKEN"] := ""
+config["TELEGRAM_CHAT_ID"] := ""
+; إعدادات Front Line (تُعرّف هنا قبل Main)
+config["FRONTLINE_TITLE"] := "Front Line"
+config["FRONTLINE_EXE"] := ""
+config["FRONTLINE_CHECK_INTERVAL"] := 5000
+config["FRONTLINE_RESTART_ON_HANG"] := true
 
+; حالة الإنذار
+isNetAlarmPlaying := false
+isTargetAlarmPlaying := false
+isAlarmPlaying := false
+muteAlarm := false
+retryScheduled := false
+
+; نقطة بدء
+Main()
+; (أُزيلت return خارج الدوال، غير مسموحة في v2)
 return
 
-;==================== الوظائف ====================
+Main() {
+    global logFile
+    Log("[START] تشغيل النسخة الشاملة البسيطة v2 بدون انتظار مبدئي")
+    ; مؤقتات v2
+    SetTimer(StatusCheckTimer, Config("STATUS_CHECK_INTERVAL"))
+    SetTimer(StayOnlineClickTimer, Config("STAY_ONLINE_INTERVAL"))
+    SetTimer(TargetMonitorTimer, Config("TARGET_CHECK_INTERVAL"))
+    SetTimer(AlarmBeep, 0)  ; إيقاف إنذار الصوت مبدئياً
+    ; حارس نافذة Front Line
+    SetTimer(FrontLineGuardTimer, Config("FRONTLINE_CHECK_INTERVAL"))
+}
 
-StatusCheckTimer:
-{
-    if (DetectOffline()) {
-        if (!isNetAlarmPlaying) {
+Config(key) {
+    global config
+    return config.Has(key) ? config[key] : ""
+}
+
+ShouldRun() {
+    if !Config("PAUSE_WHEN_ACTIVE")
+        return true
+    return A_TimeIdle >= Config("IDLE_THRESHOLD_MS")
+}
+
+StatusCheckTimer() {
+    global isNetAlarmPlaying
+    if !ShouldRun()
+        return
+    if DetectOffline() {
+        if !isNetAlarmPlaying {
             isNetAlarmPlaying := true
             UpdateAlarmState()
             Log("[OFFLINE] تم اكتشاف أوفلاين - تشغيل الإنذار ومحاولة الإرجاع أونلاين")
             SaveScreenshot("offline")
+            SendTelegramText("[OFFLINE] تم اكتشاف أوفلاين، سيتم محاولة الإصلاح")
         }
         EnsureOnlineStatus()
     } else {
-        if (isNetAlarmPlaying) {
+        if isNetAlarmPlaying {
             isNetAlarmPlaying := false
             UpdateAlarmState()
-            Log("[ONLINE] رجعنا أونلاين - إيقاف إنذار الشبكة")
+            Log("[ONLINE] رجوع أونلاين - إيقاف إنذار الشبكة")
             SaveScreenshot("online")
+            SendTelegramText("[ONLINE] رجعنا أونلاين")
         }
     }
 }
-return
 
-StayOnlineClickTimer:
-{
+StayOnlineClickTimer() {
+    if !ShouldRun()
+        return
     Log("[ACTION] ضغط زر Stay Online + Refresh دوري")
-    Click, %STAY_ONLINE_X%, %STAY_ONLINE_Y%
-    Sleep, 300
-    Click, %REFRESH_X%, %REFRESH_Y%
+    Click(Config("STAY_ONLINE_X"), Config("STAY_ONLINE_Y"))
+    Sleep(300)
+    Click(Config("REFRESH_X"), Config("REFRESH_Y"))
 }
-return
 
-TargetMonitorTimer:
-{
-    if (CheckImage(TARGET_IMAGE, TARGET_X1, TARGET_Y1, TARGET_X2, TARGET_Y2) || (TARGET_IMAGE2 != "" && CheckImage(TARGET_IMAGE2, TARGET_X1, TARGET_Y1, TARGET_X2, TARGET_Y2))) {
-        if (isTargetAlarmPlaying) {
+TargetMonitorTimer() {
+    global isTargetAlarmPlaying, retryScheduled
+    if !ShouldRun()
+        return
+    found := CheckTarget()
+    if found {
+        if isTargetAlarmPlaying {
             isTargetAlarmPlaying := false
             UpdateAlarmState()
-            Log("[TARGET] التارجت ورد موجود - إيقاف إنذار التارجت")
+            Log("[TARGET] التارجت موجود - إيقاف إنذار التارجت")
+            SendTelegramText("[TARGET] التارجت موجود")
         }
     } else {
-        if (!targetRetryScheduled) {
-            targetRetryScheduled := true
-            SetTimer, TargetRetry, -3000  ; إعادة المحاولة بعد 3 ثواني
-            Log("[TARGET] لم يتم العثور على التارجت - سيعاد الفحص بعد 3 ثواني")
+        if !retryScheduled {
+            retryScheduled := true
+            SetTimer(TargetRetry, -Config("TARGET_RETRY_MS"))
+            Log("[TARGET] لم يتم العثور على التارجت - سيعاد الفحص بعد " Config("TARGET_RETRY_MS") "ms")
         }
     }
 }
-return
 
-TargetRetry:
-{
-    targetRetryScheduled := false
-    if (CheckImage(TARGET_IMAGE, TARGET_X1, TARGET_Y1, TARGET_X2, TARGET_Y2)) {
+TargetRetry() {
+    global retryScheduled, isTargetAlarmPlaying
+    retryScheduled := false
+    if CheckTarget() {
         Log("[TARGET] التارجت ظهر في إعادة المحاولة")
-        if (isTargetAlarmPlaying) {
+        if isTargetAlarmPlaying {
             isTargetAlarmPlaying := false
             UpdateAlarmState()
             Log("[TARGET] إيقاف إنذار التارجت بعد ظهوره")
@@ -118,197 +164,234 @@ TargetRetry:
     } else {
         Log("[TARGET] لم يظهر التارجت بعد إعادة المحاولة - التقاط صورة وتشغيل الإنذار")
         SaveScreenshot("target_missing")
-        if (!isTargetAlarmPlaying) {
+        SendTelegramText("[TARGET] مفقود بعد إعادة المحاولة")
+        if !isTargetAlarmPlaying {
             isTargetAlarmPlaying := true
             UpdateAlarmState()
         }
     }
 }
-return
 
 EnsureOnlineStatus() {
-    ; محاولة إرجاع الحالة أونلاين: اضغط ستاي أونلاين ثم ريفريش
-    Click, %STAY_ONLINE_X%, %STAY_ONLINE_Y%
-    Sleep, 300
-    Click, %REFRESH_X%, %REFRESH_Y%
-    Sleep, %POST_REFRESH_DELAY%
+    Click(Config("STAY_ONLINE_X"), Config("STAY_ONLINE_Y"))
+    Sleep(300)
+    Click(Config("REFRESH_X"), Config("REFRESH_Y"))
+    Sleep(Config("POST_REFRESH_DELAY"))
 }
 
 DetectOffline() {
-    ; تحقق أولاً عبر صور الأوفلاين إن وجدت
-    for index, imgPath in OFFLINE_IMAGES {
-        if (FileExist(imgPath)) {
-            if (CheckImage(imgPath, 0, 0, A_ScreenWidth, A_ScreenHeight))
-                return true
-        }
-    }
-    ; بديل: تحقق عبر لون بكسل عند نقطة الحالة
-    color := PixelGetColorAt(STATUS_X, STATUS_Y)
-    if (color = OFFLINE_COLOR)
+    offlineByPixel := (PixelGetColor(Config("STATUS_X"), Config("STATUS_Y"), "RGB") = Config("STATUS_COLOR_OFFLINE"))
+    if offlineByPixel
         return true
-    ; يمكن أيضاً محاولة التأكد من صور الأونلاين
-    for index, imgPath in ONLINE_IMAGES {
-        if (FileExist(imgPath)) {
-            if (CheckImage(imgPath, 0, 0, A_ScreenWidth, A_ScreenHeight))
-                return false
-        }
+    if Config("USE_IMAGES_STATUS") {
+        ; إن رغبت باستعمال الصور (اختياري)
+        ; ضع هنا صور الحالة وقم بالبحث عنها
+        ; افتراضياً معطل لتخفيف الحمل
     }
-    ; الافتراضي: اعتبرها أونلاين إذا لم تظهر مؤشرات الأوفلاين
     return false
 }
 
-CheckImage(imgPath, x1, y1, x2, y2) {
-    if (!FileExist(imgPath))
+CheckTarget() {
+    if Config("TARGET_BY_PIXEL") {
+        x1 := Config("TARGET_X1"), y1 := Config("TARGET_Y1")
+        x2 := Config("TARGET_X2"), y2 := Config("TARGET_Y2")
+        tol := Config("TARGET_COLOR_VAR")
+        targetColor := Config("TARGET_COLOR")
+        local fx := 0, fy := 0
+        found := PixelSearch(&fx, &fy, x1, y1, x2, y2, targetColor, tol, "Fast RGB")
+        return !!found
+    } else if Config("USE_IMAGES_TARGET") {
+        ; إن رغبت باستعمال صورة للكلمة المستهدفة (اختياري)
+        ; استعمل ImageSearch في v2 بشكل مدروس
+        ; مثال:
+        ; local fx := 0, fy := 0
+        ; found := ImageSearch(&fx, &fy, Config("TARGET_X1"), Config("TARGET_Y1"), Config("TARGET_X2"), Config("TARGET_Y2"), "*" Config("IMG_TOL") " " A_ScriptDir "\\profiles\\target_word.png")
+        ; return !!found
         return false
-    local fx, fy
-    ImageSearch, fx, fy, %x1%, %y1%, %x2%, %y2%, *%IMG_TOL% %imgPath%
-    return (ErrorLevel = 0)
-}
-
-PixelGetColorAt(x, y) {
-    PixelGetColor, c, %x%, %y%, RGB
-    return c
+    }
+    return false
 }
 
 UpdateAlarmState() {
-    static prev := false
+    global isNetAlarmPlaying, isTargetAlarmPlaying, isAlarmPlaying
+    prev := isAlarmPlaying
     isAlarmPlaying := (isNetAlarmPlaying || isTargetAlarmPlaying)
-    if (isAlarmPlaying && !prev) {
-        SetTimer, AlarmBeep, 1500
+    if isAlarmPlaying && !prev {
+        SetTimer(AlarmBeep, 1500)
         Log("[ALARM] تشغيل إنذار الصوت")
-    } else if (!isAlarmPlaying && prev) {
-        SetTimer, AlarmBeep, Off
+    } else if !isAlarmPlaying && prev {
+        SetTimer(AlarmBeep, 0)
         Log("[ALARM] إيقاف إنذار الصوت")
     }
-    prev := isAlarmPlaying
 }
 
-AlarmBeep:
-{
-    if (isAlarmPlaying && !muteAlarm) {
-        SoundBeep, 900, 250
-    }
+AlarmBeep() {
+    global isAlarmPlaying, muteAlarm
+    if isAlarmPlaying && !muteAlarm
+        SoundBeep(900, 250)
 }
-return
 
+; ————— لقطات شاشة عبر GDI+ —————
 SaveScreenshot(prefix) {
-    ; يلتقط صورة للشاشة كاملة باستخدام MSPaint
-    FileCreateDir, %SCREENSHOT_DIR%
-    FormatTime, ts, , yyyyMMdd_HHmmss
-    filePath := SCREENSHOT_DIR "\" prefix "_" ts ".png"
+    global screenshotDir
+    DirCreate(screenshotDir)
+    ts := FormatTime(A_Now, "yyyyMMdd_HHmmss")
+    path := screenshotDir "\" prefix "_" ts ".png"
+    CaptureScreenPNG(path)
+    Log("[SHOT] تم حفظ لقطة شاشة: " path)
+}
 
-    ; انسخ الشاشة إلى الحافظة
-    Send, {PrintScreen}
-    ClipWait, 2
-    if (ErrorLevel) {
-        Log("[SHOT] فشل نسخ الشاشة إلى الحافظة")
+CaptureScreenPNG(path) {
+    ; كود GDI+ لالتقاط كامل الشاشة وحفظها PNG
+    w := A_ScreenWidth, h := A_ScreenHeight
+    hdc := DllCall("GetDC", "ptr", 0, "ptr")
+    hcdc := DllCall("CreateCompatibleDC", "ptr", hdc, "ptr")
+    hbmp := DllCall("CreateCompatibleBitmap", "ptr", hdc, "int", w, "int", h, "ptr")
+    obmp := DllCall("SelectObject", "ptr", hcdc, "ptr", hbmp, "ptr")
+    DllCall("BitBlt", "ptr", hcdc, "int", 0, "int", 0, "int", w, "int", h, "ptr", hdc, "int", 0, "int", 0, "uint", 0x00CC0020)
+
+    ; بدء GDI+
+    si := Buffer(24, 0)
+    NumPut("uint", 1, si, 0) ; GdiplusVersion
+    pToken := 0
+    DllCall("gdiplus\GdiplusStartup", "ptr*", pToken, "ptr", si, "ptr", 0)
+    pBitmap := 0
+    DllCall("gdiplus\GdipCreateBitmapFromHBITMAP", "ptr", hbmp, "ptr", 0, "ptr*", pBitmap)
+
+    ; CLSID PNG
+    clsid := Buffer(16, 0)
+    GetEncoderClsid("image/png", clsid)
+    DllCall("gdiplus\GdipSaveImageToFile", "ptr", pBitmap, "wstr", path, "ptr", clsid, "ptr", 0)
+
+    ; تنظيف
+    DllCall("gdiplus\GdipDisposeImage", "ptr", pBitmap)
+    DllCall("gdiplus\GdiplusShutdown", "ptr", pToken)
+    DllCall("SelectObject", "ptr", hcdc, "ptr", obmp)
+    DllCall("DeleteObject", "ptr", hbmp)
+    DllCall("DeleteDC", "ptr", hcdc)
+    DllCall("ReleaseDC", "ptr", 0, "ptr", hdc)
+}
+
+GetEncoderClsid(mimeType, clsidBuf) {
+    ; الحصول على CLSID للمُرمِّز
+    DllCall("gdiplus\GdipGetImageEncodersSize", "uint*", count, "uint*", size)
+    buf := Buffer(size)
+    DllCall("gdiplus\GdipGetImageEncoders", "uint", count, "uint", size, "ptr", buf)
+    ; بنية ImageCodecInfo: نقرأ الـ MimeType حتى نطابقه
+    ; نبحث خطياً عن النوع المطلوب
+    offset := 0
+    Loop count {
+        ; تخطّي حقول حتى نصل لحقل MimeType (wstr pointer)
+        ; البنية معقدة، سنستخدم أسلوب بسيط: نجرب قراءة سلسلة الـ MimeType من البوفر إذ عناوين الحقول ثابتة غالباً عبر الأمثلة
+        ; لتجنب التعقيد الكامل، نستخدم قيمة PNG المعروفة غالباً من الأنظمة
+        ; CLSID PNG القياسي
+        ; {557CF406-1A04-11D3-9A73-0000F81EF32E}
+        ; نكتب الـ GUID مباشرة إذا كان mimeType = "image/png"
+        if (mimeType = "image/png") {
+            ; اكتب الـ GUID في clsidBuf
+            ; GUID = 0x557CF406,0x1A04,0x11D3,{0x9A,0x73,0x00,0x00,0xF8,0x1E,0xF3,0x2E}
+            ; مخزن كـ 16 بايت
+            NumPut("uint", 0x557CF406, clsidBuf, 0)
+            NumPut("ushort", 0x1A04, clsidBuf, 4)
+            NumPut("ushort", 0x11D3, clsidBuf, 6)
+            NumPut("uchar", 0x9A, clsidBuf, 8)
+            NumPut("uchar", 0x73, clsidBuf, 9)
+            NumPut("uchar", 0x00, clsidBuf, 10)
+            NumPut("uchar", 0x00, clsidBuf, 11)
+            NumPut("uchar", 0xF8, clsidBuf, 12)
+            NumPut("uchar", 0x1E, clsidBuf, 13)
+            NumPut("uchar", 0xF3, clsidBuf, 14)
+            NumPut("uchar", 0x2E, clsidBuf, 15)
+            return
+        }
+    }
+}
+
+; ————— Telegram (نصي) —————
+SendTelegramText(text) {
+    token := Config("TELEGRAM_BOT_TOKEN")
+    chatId := Config("TELEGRAM_CHAT_ID")
+    if (token = "" || chatId = "")
         return
+    url := "https://api.telegram.org/bot" token "/sendMessage"
+    body := "chat_id=" chatId "&text=" UrlEncode(text)
+    req := ComObject("WinHttp.WinHttpRequest.5.1")
+    req.Open("POST", url, false)
+    req.SetRequestHeader("Content-Type", "application/x-www-form-urlencoded")
+    try req.Send(body)
+}
+
+UrlEncode(str) {
+    out := ""
+    for c in StrSplit(str) {
+        code := Ord(c)
+        if (code>=0x30 && code<=0x39) || (code>=0x41 && code<=0x5A) || (code>=0x61 && code<=0x7A) || c in "-._~" {
+            out .= c
+        } else if (c = " ") {
+            out .= "+"
+        } else {
+            out .= "%" Format("{:02X}", code)
+        }
     }
-    ; افتح الرسام وألصق واحفظ
-    Run, mspaint.exe
-    WinWaitActive, ahk_exe mspaint.exe, , 3
-    if (ErrorLevel) {
-        Log("[SHOT] لم يفتح برنامج الرسام")
-        return
-    }
-    Send, ^v
-    Sleep, 300
-    Send, ^s
-    WinWaitActive, Save As, , 3
-    if (!ErrorLevel) {
-        ; أدخل المسار واحفظ
-        Send, %filePath%
-        Sleep, 200
-        Send, {Enter}
-        Sleep, 500
-    }
-    ; إغلاق الرسام
-    WinClose, ahk_exe mspaint.exe
-    Log("[SHOT] تم حفظ لقطة شاشة: " filePath)
+    return out
 }
 
 Log(msg) {
-    FormatTime, now, , yyyyMMddHHmmss
-    FileAppend, % "[" now "] " msg "`r`n", %LOG_FILE%
+    global logFile
+    now := FormatTime(A_Now, "yyyyMMddHHmmss")
+    FileAppend("[" now "] " msg "`r`n", logFile, "UTF-8")
 }
 
-LoadSettings() {
-    global STAY_ONLINE_X, STAY_ONLINE_Y, REFRESH_X, REFRESH_Y, STATUS_X, STATUS_Y
-    global TARGET_X1, TARGET_Y1, TARGET_X2, TARGET_Y2
-    global STAY_ONLINE_INTERVAL, STATUS_CHECK_INTERVAL, MAIN_LOOP_INTERVAL, POST_REFRESH_DELAY, IMG_TOL
-    global ONLINE_IMAGES, OFFLINE_IMAGES, TARGET_IMAGE, TARGET_IMAGE2
+; إضافة إعدادات Front Line في خريطة الإعدادات
+config["FRONTLINE_TITLE"] := "Front Line"
+config["FRONTLINE_EXE"] := ""               ; ضع المسار التنفيذي إن رغبت بإعادة التشغيل التلقائي
+config["FRONTLINE_CHECK_INTERVAL"] := 5000    ; كل 5 ثوانٍ تحقق من النافذة
+config["FRONTLINE_RESTART_ON_HANG"] := true   ; أعد التشغيل إن كانت النافذة لا تستجيب
 
-    ini := A_ScriptDir "\settings.ini"
-
-    ; منطقة "Stay Online" -> احسب نقطة النقر في المنتصف
-    IniRead, soX1, %ini%, Coordinates, StayOnlineAreaTopLeftX
-    IniRead, soY1, %ini%, Coordinates, StayOnlineAreaTopLeftY
-    IniRead, soX2, %ini%, Coordinates, StayOnlineAreaBottomRightX
-    IniRead, soY2, %ini%, Coordinates, StayOnlineAreaBottomRightY
-    if (soX1 != "ERROR" && soY1 != "ERROR" && soX2 != "ERROR" && soY2 != "ERROR") {
-        STAY_ONLINE_X := Floor((soX1 + soX2) / 2)
-        STAY_ONLINE_Y := Floor((soY1 + soY2) / 2)
+FrontLineGuardTimer() {
+    if !ShouldRun()
+        return
+    title := Config("FRONTLINE_TITLE")
+    if (title = "")
+        return
+    hwnd := WinExist(title)
+    if !hwnd {
+        Log("[FL] نافذة Front Line غير موجودة - محاولة تشغيل")
+        exe := Config("FRONTLINE_EXE")
+        if (exe != "" && FileExist(exe)) {
+            Run(exe)
+            WinWait(title, , 10)
+            if WinExist(title) {
+                Log("[FL] تم فتح Front Line")
+                SendTelegramText("[FL] تم فتح Front Line")
+            } else {
+                Log("[FL] فشل فتح Front Line")
+            }
+        } else {
+            Log("[FL] لا يوجد مسار للتشغيل - اضبط FRONTLINE_EXE إن رغبت")
+        }
+        return
     }
-
-    ; زر التحديث
-    IniRead, REFRESH_X, %ini%, Coordinates, RefreshX, %REFRESH_X%
-    IniRead, REFRESH_Y, %ini%, Coordinates, RefreshY, %REFRESH_Y%
-
-    ; منطقة الحالة StatusArea -> احسب بكسل المنتصف للفحص
-    IniRead, stX1, %ini%, Coordinates, StatusAreaTopLeftX
-    IniRead, stY1, %ini%, Coordinates, StatusAreaTopLeftY
-    IniRead, stX2, %ini%, Coordinates, StatusAreaBottomRightX
-    IniRead, stY2, %ini%, Coordinates, StatusAreaBottomRightY
-    if (stX1 != "ERROR" && stY1 != "ERROR" && stX2 != "ERROR" && stY2 != "ERROR") {
-        STATUS_X := Floor((stX1 + stX2) / 2)
-        STATUS_Y := Floor((stY1 + stY2) / 2)
+    ; تحقق من التعطل
+    try {
+        hung := DllCall("IsHungAppWindow", "ptr", hwnd, "int")
+    } catch {
+        hung := 0
     }
-
-    ; منطقة التارجت
-    IniRead, TARGET_X1, %ini%, Coordinates, TargetAreaTopLeftX, %TARGET_X1%
-    IniRead, TARGET_Y1, %ini%, Coordinates, TargetAreaTopLeftY, %TARGET_Y1%
-    IniRead, TARGET_X2, %ini%, Coordinates, TargetAreaBottomRightX, %TARGET_X2%
-    IniRead, TARGET_Y2, %ini%, Coordinates, TargetAreaBottomRightY, %TARGET_Y2%
-
-    ; الأزمنة
-    IniRead, STAY_ONLINE_INTERVAL, %ini%, Timings, StayOnlineInterval, %STAY_ONLINE_INTERVAL%
-    IniRead, STATUS_CHECK_INTERVAL, %ini%, Timings, StatusCheckInterval, %STATUS_CHECK_INTERVAL%
-    IniRead, MAIN_LOOP_INTERVAL, %ini%, Timings, MainLoopInterval, %MAIN_LOOP_INTERVAL%
-    IniRead, POST_REFRESH_DELAY, %ini%, Timings, PostRefreshDelayMs, %POST_REFRESH_DELAY%
-
-    ; تحمل البحث بالصورة
-    IniRead, IMG_TOL, %ini%, Search, Tolerance, %IMG_TOL%
-
-    ; الصور
-    profilesDir := A_ScriptDir "\profiles\"
-    ONLINE_IMAGES := []
-    OFFLINE_IMAGES := []
-    TARGET_IMAGE := ""
-    TARGET_IMAGE2 := ""
-
-    IniRead, OnlineImageName, %ini%, Citrix, OnlineImageName
-    IniRead, OnlineImageName2, %ini%, Citrix, OnlineImageName2
-    IniRead, CoachingImageName, %ini%, Citrix, CoachingImageName
-    IniRead, CoachingImageName2, %ini%, Citrix, CoachingImageName2
-    IniRead, OfflineImageName, %ini%, Citrix, OfflineImageName
-
-    IniRead, TargetImageName, %ini%, WordMonitor, TargetImageName
-    IniRead, TargetImageName2, %ini%, WordMonitor, TargetImageName2
-
-    if (OnlineImageName != "")
-        ONLINE_IMAGES.Push(profilesDir OnlineImageName)
-    if (OnlineImageName2 != "")
-        ONLINE_IMAGES.Push(profilesDir OnlineImageName2)
-    if (CoachingImageName != "")
-        ONLINE_IMAGES.Push(profilesDir CoachingImageName)
-    if (CoachingImageName2 != "")
-        ONLINE_IMAGES.Push(profilesDir CoachingImageName2)
-
-    if (OfflineImageName != "")
-        OFFLINE_IMAGES.Push(profilesDir OfflineImageName)
-
-    if (TargetImageName != "")
-        TARGET_IMAGE := profilesDir TargetImageName
-    if (TargetImageName2 != "")
-        TARGET_IMAGE2 := profilesDir TargetImageName2
+    if (hung && Config("FRONTLINE_RESTART_ON_HANG")) {
+        Log("[FL] النافذة لا تستجيب - إعادة التشغيل")
+        WinClose("ahk_id " hwnd)
+        Sleep(800)
+        exe := Config("FRONTLINE_EXE")
+        if (exe != "" && FileExist(exe)) {
+            Run(exe)
+            WinWait(title, , 10)
+            if WinExist(title) {
+                Log("[FL] أعيد فتح Front Line")
+                SendTelegramText("[FL] أعيد فتح Front Line")
+            }
+        }
+    }
+    ; تأكيد إظهار النافذة (اختياري)
+    try WinActivate("ahk_id " hwnd)
 }
