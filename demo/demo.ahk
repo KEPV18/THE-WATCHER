@@ -1,10 +1,9 @@
 ; ============================================================
 ;                      Demo - Ultra-Light Watcher
-;           Single File Version (v1.6 - Final Syntax Fix)
+;      Single File Version (v1.8 - Original Telegram Method)
 ; ============================================================
-; - تم إصلاح جميع أخطاء بناء الجملة الناتجة عن ضغط الأكواد.
-; - تم إصلاح مشكلة إعادة تشغيل الإنذار فوراً بعد إيقافه.
-; - عند الضغط على أي زر أثناء الإنذار، يتم كتم الصوت لمدة دقيقتين.
+; - تم العودة إلى طريقة إرسال Telegram الأصلية (WinHttp المتزامن) لضمان الموثوقية.
+; - تمت إضافة تسجيل لحالة استجابة Telegram في ملف السجل.
 ; ============================================================
 
 #Requires AutoHotkey v2.0
@@ -237,24 +236,35 @@ SendPeriodicReport() {
     SendTelegram(report)
 }
 
+; --- **دالة Telegram الأصلية والموثوقة** ---
 SendTelegram(message) {
-    Log("Attempting to send Telegram message...")
+    Log("Attempting to send Telegram message via WinHttp (Original Method)...")
     if (SETTINGS["TelegramBotToken"] = "YOUR_TOKEN" || SETTINGS["TelegramChatId"] = "YOUR_CHAT_ID") {
         Log("Telegram send skipped: Token/ChatID not configured.")
         return
     }
+
     encodedMessage := UriEncode(message)
     url := "https://api.telegram.org/bot" . SETTINGS["TelegramBotToken"] . "/sendMessage"
     postBody := "chat_id=" . SETTINGS["TelegramChatId"] . "&text=" . encodedMessage . "&parse_mode=Markdown"
+
     try {
         req := ComObject("WinHttp.WinHttpRequest.5.1" )
-        req.Open("POST", url, true)
+        ; فتح الطلب بشكل متزامن (false) لضمان اكتماله
+        req.Open("POST", url, false)
         req.SetRequestHeader("Content-Type", "application/x-www-form-urlencoded")
         req.SetTimeouts(5000, 5000, 5000, 5000)
         req.Send(postBody)
-        Log("Telegram request sent.")
-    } catch {
-        Log("Error: Failed to send Telegram request.")
+
+        ; تسجيل حالة الاستجابة
+        statusCode := req.Status
+        if (statusCode = 200) {
+            Log("Telegram request successful. Status: " . statusCode)
+        } else {
+            Log("Telegram request FAILED. Status: " . statusCode . ". Response: " . req.ResponseText)
+        }
+    } catch as e {
+        Log("CRITICAL Error: Failed to send Telegram request via WinHttp. " . e.Message)
     }
 }
 

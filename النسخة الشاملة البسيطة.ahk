@@ -71,8 +71,6 @@ retryScheduled := false
 
 ; نقطة بدء
 Main()
-; (أُزيلت return خارج الدوال، غير مسموحة في v2)
-return
 
 Main() {
     global logFile
