@@ -3,7 +3,7 @@
 #SingleInstance Force
 
 ; إعدادات Telegram
-BOT_TOKEN := "8328100113:AAEEtm8w7Em7eqSVSjq8yiG5nPu7JNBz9Nk"
+BOT_TOKEN := "YOUR_BOT_TOKEN"
 CHAT_ID := "5670001305"
 
 ; دالة ترميز URL للنص العربي
