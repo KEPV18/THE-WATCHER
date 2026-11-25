@@ -37,6 +37,6 @@ UpdateFromGithub.ahk   updater
 
 ## Notes
 
-- Token values are not stored in this repository. If you fork it, keep it that way.
+- The current files in this repository do not contain a bot token. Configure your own token locally and keep it out of commits.
 - Detection depends on screen resolution, scaling and the exact look of the watched window, so expect to re-capture images and adjust a profile.
 - Comments and some messages are in Arabic.
