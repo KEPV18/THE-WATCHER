@@ -21,7 +21,7 @@ global SETTINGS := Map(
     "FixStep1X", 140, "FixStep1Y", 994,
     "FixStep2X", 156, "FixStep2Y", 845,
     "FixStep3X", 328, "FixStep3Y", 323,
-    "TelegramBotToken", "8328100113:AAEEtm8w7Em7eqSVSjq8yiG5nPu7JNBz9Nk",
+    "TelegramBotToken", "YOUR_BOT_TOKEN",
     "TelegramChatId", "5670001305",
     "UserIdleThreshold", 120000,
     "RefreshInterval", 300000,
